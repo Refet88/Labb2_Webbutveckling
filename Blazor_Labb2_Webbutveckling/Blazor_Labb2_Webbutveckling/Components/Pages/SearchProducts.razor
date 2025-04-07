@@ -1,0 +1,105 @@
+﻿@page "/searchproducts"
+@using Blazor_Labb2_Webbutveckling.Models
+@using Blazor_Labb2_Webbutveckling.Services
+@inject ProductService ProductService
+@rendermode InteractiveServer
+
+<h3>Search Products</h3>
+
+<input @bind="searchQuery" @bind:event="oninput" placeholder="Enter name or product number to search" />
+<button @onclick="ProductSearch" class="btn btn-primary">Search</button>
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <p class="alert alert-info mt-3">@message</p>
+}
+
+@if (products != null && products.Any())
+{
+    <table class="table mt-3">
+        <thead>
+            <tr>
+                <th>Product Number</th>
+                <th>Name</th>
+                <th>Description</th>
+                <th>Price</th>
+                <th>Category</th>
+                <th>In Stock</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var product in products)
+            {
+                <tr>
+                    <td>@product.ProductNumber</td>
+                    <td>@product.Name</td>
+                    <td>@product.Description</td>
+                    <td>@product.Price</td>
+                    <td>@product.Category</td>
+                    <td>@product.StockQuantity</td>
+                    <td>
+                        @if (product.IsDiscontinued)
+                        {
+                            <span class="text-danger">Discontinued</span>
+                        }
+                        else
+                        {
+                            <span class="text-success">Available</span>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+else if (products != null && !products.Any() && !string.IsNullOrWhiteSpace(searchQuery))
+{
+    <p>No products found matching "@searchQuery".</p>
+}
+else if (products != null && !products.Any())
+{
+    <p>No products available.</p>
+}
+
+@code {
+    private string searchQuery = string.Empty;
+    private List<Product>? products = new();
+    private string message = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            products = await ProductService.GetAllProducts();
+            message = products.Any() ? "Showing all products." : "No products found.";
+        }
+        catch (Exception ex)
+        {
+            message = $"Error fetching products: {ex.Message}";
+        }
+    }
+
+    private async Task ProductSearch()
+    {
+        if (string.IsNullOrWhiteSpace(searchQuery))
+        {
+            products = await ProductService.GetAllProducts();
+            message = products.Any() ? "Showing all products." : "No products found.";
+        }
+        else
+        {
+            try
+            {
+                var allProducts = await ProductService.GetAllProducts();
+                products = allProducts.Where(p => p.Name!.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)
+                                                   || p.ProductNumber.ToString().Contains(searchQuery)).ToList();
+                message = products.Any() ? "Search results:" : $"No products found matching \"{searchQuery}\".";
+            }
+            catch (Exception ex)
+            {
+                message = $"Error: {ex.Message}";
+            }
+        }
+    }
+}

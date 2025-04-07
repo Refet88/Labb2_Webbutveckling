@@ -1,0 +1,129 @@
+﻿@page "/register"
+@using Blazor_Labb2_Webbutveckling.Models
+@using Blazor_Labb2_Webbutveckling.Services
+@using System.Text.Json
+@inject CustomerService CustomerService
+@inject NavigationManager NavigationManager
+@inject AuthenticationService AuthenticationService
+@inject IHttpClientFactory HttpClientFactory
+@rendermode InteractiveServer
+
+<h3>Register</h3>
+
+<form class="w-50">
+    <div class="mb-3 row">
+        <label for="firstName" class="col-sm-4 col-form-label">Firstname:</label>
+        <div class="col-sm-8">
+            <input id="firstName" @bind="newCustomer.FirstName" class="form-control" />
+        </div>
+    </div>
+    <div class="mb-3 row">
+        <label for="lastName" class="col-sm-4 col-form-label">Lastname:</label>
+        <div class="col-sm-8">
+            <input id="lastName" @bind="newCustomer.LastName" class="form-control" />
+        </div>
+    </div>
+    <div class="mb-3 row">
+        <label for="email" class="col-sm-4 col-form-label">E-mail:</label>
+        <div class="col-sm-8">
+            <input id="email" @bind="newCustomer.Email" type="email" class="form-control" autocomplete="new-email" />
+        </div>
+    </div>
+    <div class="mb-3 row">
+        <label for="phone" class="col-sm-4 col-form-label">Phonenumber:</label>
+        <div class="col-sm-8">
+            <input id="phone" @bind="newCustomer.PhoneNumber" type="tel" class="form-control" />
+        </div>
+    </div>
+    <div class="mb-3 row">
+        <label for="address" class="col-sm-4 col-form-label">Address:</label>
+        <div class="col-sm-8">
+            <input id="address" @bind="newCustomer.Street" placeholder="Street" class="form-control mb-2" />
+            <input @bind="newCustomer.ZipCode" placeholder="Zip Code" class="form-control mb-2" />
+            <input @bind="newCustomer.City" placeholder="City" class="form-control mb-2" />
+        </div>
+    </div>
+    <div class="mb-3 row">
+        <label for="password" class="col-sm-4 col-form-label">Password:</label>
+        <div class="col-sm-8">
+            <input id="password" @bind="password" type="password" class="form-control" autocomplete="new-password" />
+        </div>
+    </div>
+    <button type="button" @onclick="NewCustomer" class="btn btn-primary">Register</button>
+</form>
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="alert alert-danger">@errorMessage</div>
+}
+
+@if (isRegistered)
+{
+    <p>Registration was successful!</p>
+}
+else if (!isRegistered && !string.IsNullOrWhiteSpace(newCustomer.Email))
+{
+    <p>There was an error registering. Please try again.</p>
+}
+
+@code {
+    private Customer newCustomer = new Customer();
+    private string password = string.Empty;
+    private bool isRegistered = false;
+    private string? errorMessage = null;
+
+    private async Task NewCustomer()
+    {
+        if (string.IsNullOrWhiteSpace(newCustomer.FirstName) ||
+            string.IsNullOrWhiteSpace(newCustomer.LastName) ||
+            string.IsNullOrWhiteSpace(password))
+        {
+            errorMessage = "First name, last name, and password are required.";
+            isRegistered = false;
+            return;
+        }
+
+        try
+        {
+            newCustomer.Password = password;
+            var registeredCustomer = await CustomerService.RegisterCustomer(newCustomer);
+            isRegistered = true;
+
+            var loginModel = new LoginModel
+                {
+                    Username = newCustomer.Email,
+                    Password = password
+                };
+
+            var client = HttpClientFactory.CreateClient("AuthorizedClient");
+            var response = await client.PostAsJsonAsync("api/Auth/login", loginModel);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadFromJsonAsync<JsonElement>();
+                if (json.TryGetProperty("token", out var tokenProperty))
+                {
+                    var token = tokenProperty.GetString() ?? string.Empty;
+                    await AuthenticationService.SaveToken(token);
+
+                    var role = AuthenticationService.GetRoleFromToken(token);
+
+                    NavigationManager.NavigateTo(role == "Customer" ? "/customer-dashboard" : "/admin-dashboard", true);
+                }
+                else
+                {
+                    errorMessage = "Token not found in response.";
+                }
+            }
+            else
+            {
+                errorMessage = "Login failed after registration. Please try logging in manually.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"An error occurred during registration or login: {ex.Message}";
+            isRegistered = false;
+        }
+    }
+}

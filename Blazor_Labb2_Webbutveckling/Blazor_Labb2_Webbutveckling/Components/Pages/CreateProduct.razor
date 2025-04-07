@@ -1,0 +1,100 @@
+﻿@page "/createproduct"
+@using Blazor_Labb2_Webbutveckling.Models
+@using Blazor_Labb2_Webbutveckling.Services
+@inject ProductService ProductService
+@inject NavigationManager NavigationManager
+@rendermode InteractiveServer
+
+<h3>Create New Product</h3>
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="alert @(isDuplicate ? "alert-danger text-danger" : "alert-success text-success") mt-3">
+        @message
+    </div>
+}
+
+
+<button class="btn btn-secondary mt-3" @onclick="NavigateBack">Back</button>
+
+<EditForm Model="newProduct" OnValidSubmit="HandleValidSubmit">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="form-group">
+        <label for="productNumber">Product Number:</label>
+        <InputNumber id="productNumber" class="@GetProductNumberCssClass()"
+                     @bind-Value="newProduct.ProductNumber" />
+    </div>
+
+    <div class="form-group">
+        <label for="name">Name:</label>
+        <InputText id="name" class="form-control" @bind-Value="newProduct.Name" />
+    </div>
+
+    <div class="form-group">
+        <label for="description">Description:</label>
+        <InputText id="description" class="form-control" @bind-Value="newProduct.Description" />
+    </div>
+
+    <div class="form-group">
+        <label for="price">Price:</label>
+        <InputNumber id="price" class="form-control" @bind-Value="newProduct.Price" />
+    </div>
+
+    <div class="form-group">
+        <label for="quantity">Quantity:</label>
+        <InputNumber id="quantity" class="form-control" @bind-Value="newProduct.StockQuantity" />
+    </div>
+
+    <div class="form-group">
+        <label for="category">Category:</label>
+        <InputText id="category" class="form-control" @bind-Value="newProduct.Category" />
+    </div>
+
+    <button type="submit" class="btn btn-primary">Create</button>
+</EditForm>
+
+@code {
+    private Product newProduct = new Product();
+    private string message = string.Empty;
+    private bool isDuplicate = false;
+
+    private string GetProductNumberCssClass()
+    {
+        return isDuplicate ? "form-control border-danger" : "form-control";
+    }
+
+
+    private async Task HandleValidSubmit()
+    {
+        try
+        {
+            var success = await ProductService.AddProduct(newProduct);
+
+            if (success)
+            {
+                message = $"Product '{newProduct.Name}' was successfully added!";
+                isDuplicate = false;
+            }
+            else
+            {
+                message = $"Failed to add product. ProductNumber {newProduct.ProductNumber} already exists.";
+                isDuplicate = true;
+            }
+
+            Console.WriteLine(message);
+        }
+        catch (Exception ex)
+        {
+            message = $"Exception occurred: {ex.Message}";
+            isDuplicate = false;
+            Console.WriteLine(message);
+        }
+    }
+
+    private void NavigateBack()
+    {
+        NavigationManager.NavigateTo("/products", true);
+    }
+}

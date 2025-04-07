@@ -1,0 +1,177 @@
+﻿@page "/update-customer"
+@using Blazor_Labb2_Webbutveckling.Models
+@using Blazor_Labb2_Webbutveckling.Services
+@inject CustomerService CustomerService
+@inject AuthenticationService AuthenticationService
+@inject NavigationManager NavigationManager
+@rendermode InteractiveServer
+
+<h3>Update Customer Details</h3>
+
+<EditForm Model="@customer" OnValidSubmit="SaveCustomer" FormName="UpdateCustomerForm">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div>
+        <label for="firstName">First Name:</label>
+        <input id="firstName" @bind="customer!.FirstName" class="form-control" />
+    </div>
+
+    <div>
+        <label for="lastName">Last Name:</label>
+        <input id="lastName" @bind="customer.LastName" class="form-control" />
+    </div>
+
+    <div>
+        <label for="email">Email:</label>
+        <input id="email" @bind="customer.Email" type="email" class="form-control" />
+    </div>
+
+    <div>
+        <label for="phoneNumber">Phone Number:</label>
+        <input id="phoneNumber" @bind="customer.PhoneNumber" type="tel" class="form-control" />
+    </div>
+
+    <div>
+        <label for="street">Street:</label>
+        <input id="street" @bind="customer.Street" class="form-control" />
+    </div>
+
+    <div>
+        <label for="zipCode">Zip Code:</label>
+        <input id="zipCode" @bind="customer.ZipCode" class="form-control" />
+    </div>
+
+    <div>
+        <label for="city">City:</label>
+        <input id="city" @bind="customer.City" class="form-control" />
+    </div>
+
+    <div>
+        <input type="checkbox" id="changePasswordCheckbox" @bind="isChangingPassword" @onclick="ClearPasswordError" />
+        <label for="changePasswordCheckbox">Change Password</label>
+    </div>
+
+    <div>
+        <label for="password">New Password:</label>
+        <input id="password" @bind="passwordInput" type="password" class="form-control"
+               placeholder="********" disabled="@(isChangingPassword ? null : true)" />
+    </div>
+
+    <div>
+        <label for="confirmPassword">Confirm Password:</label>
+        <input id="confirmPassword" @bind="confirmPasswordInput" type="password" class="form-control"
+               placeholder="Enter confirmation" @oninput="ClearPasswordError" />
+    </div>
+
+    @if (!string.IsNullOrEmpty(passwordError))
+    {
+        <p class="text-danger">@passwordError</p>
+    }
+
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <p class="text-success">@successMessage</p>
+    }
+
+    <button type="submit" class="btn btn-primary">Save Changes</button>
+</EditForm>
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <p class="text-danger">@errorMessage</p>
+}
+
+@code {
+    private Customer? customer = new Customer();
+    private string? errorMessage;
+    private string? successMessage;
+    private string passwordInput = "";
+    private string confirmPasswordInput = "";
+    private string passwordError = "";
+    private bool isChangingPassword = false;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                var token = await AuthenticationService.GetToken();
+
+                if (string.IsNullOrEmpty(token))
+                {
+                    errorMessage = "You are not logged in.";
+                    NavigationManager.NavigateTo("/login", true);
+                    return;
+                }
+
+                var customerId = AuthenticationService.GetCustomerIdFromToken(token);
+
+                if (customerId.HasValue)
+                {
+                    customer = await CustomerService.GetCustomerById(customerId.Value);
+                    if (customer != null)
+                    {
+                        passwordInput = "********";
+                    }
+                    else
+                    {
+                        errorMessage = "Failed to load customer data.";
+                    }
+                }
+                else
+                {
+                    errorMessage = "Customer ID not found in token.";
+                    NavigationManager.NavigateTo("/login", true);
+                }
+            }
+            catch (Exception ex)
+            {
+                errorMessage = $"Error fetching customer data: {ex.Message}";
+            }
+
+            StateHasChanged();
+        }
+    }
+
+    private async Task SaveCustomer()
+    {
+        try
+        {
+            if (!isChangingPassword)
+            {
+                customer!.Password = customer.Password;
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(passwordInput) || string.IsNullOrWhiteSpace(confirmPasswordInput))
+                {
+                    passwordError = "Both password fields must be filled to set a new password.";
+                    return;
+                }
+
+                if (passwordInput != confirmPasswordInput)
+                {
+                    passwordError = "Passwords do not match!";
+                    return;
+                }
+
+                customer!.Password = passwordInput;
+            }
+
+            await CustomerService.UpdateCustomer(customer);
+            successMessage = "Your changes have been saved successfully!";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error saving customer data: {ex.Message}";
+        }
+    }
+
+    private void ClearPasswordError()
+    {
+        passwordError = string.Empty;
+        successMessage = string.Empty;
+    }
+}

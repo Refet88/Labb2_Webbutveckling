@@ -1,0 +1,116 @@
+﻿@page "/orders"
+@using Blazor_Labb2_Webbutveckling.Models
+@using Blazor_Labb2_Webbutveckling.Services
+@inject OrderService OrderService
+@inject NavigationManager NavigationManager
+@rendermode InteractiveServer
+
+<h3>Orders</h3>
+
+<input @bind="SearchQuery" @bind:event="oninput" placeholder="Search by ID, Name, or Email" style="width: 300px;" />
+<button class="btn btn-primary" @onclick="SearchOrders">Search</button>
+
+@if (orders == null)
+{
+    <p><em>Loading...</em></p>
+}
+else if (!orders.Any())
+{
+    <p>No orders available.</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Order Id</th>
+                <th>Customer Id</th>
+                <th>Customer Name</th>
+                <th>Order Date</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var order in orders)
+            {
+                <tr>
+                    <td>@order.OrderId</td>
+                    <td>@order.CustomerId</td>
+                    <th>@order.Customer?.FirstName @order.Customer?.LastName</th>
+                    <td>@order.OrderDate.ToString("yyyy-MM-dd")</td>
+                    <td>
+                        <button class="btn btn-info" @onclick="() => NavigateToDetails(order.OrderId)">Details</button>
+                        <button class="btn btn-danger" @onclick="() => DeleteOrder(order.OrderId)">Delete</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private IEnumerable<Order> orders = new List<Order>();
+    private string SearchQuery = string.Empty;
+    private string message = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            orders = await OrderService.GetAllOrders() ?? new List<Order>();
+        }
+        catch
+        {
+            orders = new List<Order>();
+        }
+    }
+
+    private async Task SearchOrders()
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(SearchQuery))
+            {
+                orders = await OrderService.GetAllOrders();
+                message = orders.Any() ? "Showing all orders." : "No orders found.";
+            }
+            else
+            {
+                var allOrders = await OrderService.GetAllOrders();
+                orders = allOrders.Where(o =>
+                    o.Customer?.FirstName?.Contains(SearchQuery, StringComparison.OrdinalIgnoreCase) == true ||
+                    o.Customer?.LastName?.Contains(SearchQuery, StringComparison.OrdinalIgnoreCase) == true ||
+                    o.Customer?.Email?.Contains(SearchQuery, StringComparison.OrdinalIgnoreCase) == true ||
+                    o.OrderId.ToString().Contains(SearchQuery, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                message = orders.Any() ? "Search results:" : $"No orders found matching \"{SearchQuery}\".";
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error during search: {ex.Message}");
+            orders = new List<Order>();
+            message = $"Error during search: {ex.Message}";
+        }
+    }
+
+
+    private void NavigateToDetails(int orderId)
+    {
+        NavigationManager.NavigateTo($"/orderdetails/{orderId}", true);
+    }
+
+    private async Task DeleteOrder(int orderId)
+    {
+        try
+        {
+            await OrderService.DeleteOrder(orderId);
+            orders = await OrderService.GetAllOrders();
+        }
+        catch
+        {
+            Console.WriteLine("An error has occurred");
+        }
+    }
+}

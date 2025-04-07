@@ -1,0 +1,180 @@
+﻿@page "/products"
+@using Blazor_Labb2_Webbutveckling.Models
+@using Blazor_Labb2_Webbutveckling.Services
+@inject ProductService ProductService
+@inject NavigationManager NavigationManager
+@inject AuthenticationService AuthenticationService
+@rendermode InteractiveServer
+
+<h3>Products</h3>
+
+@if (isAdmin)
+{
+    <button class="btn btn-success" @onclick="NavigateToCreateProduct">Create New Product</button>
+}
+
+<p>@message</p>
+
+@if (isLoading)
+{
+    <p><em>Loading products...</em></p>
+}
+else if (products == null || !products.Any())
+{
+    <p>No products available.</p>
+}
+else if (isEditing)
+{
+    <EditForm Model="selectedProduct" OnValidSubmit="HandleValidSubmit">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+        <div>
+            <label>Name:</label>
+            <InputText @bind-Value="selectedProduct!.Name" />
+        </div>
+        <div>
+            <label>Description:</label>
+            <InputText @bind-Value="selectedProduct.Description" />
+        </div>
+        <div>
+            <label>Price:</label>
+            <InputNumber @bind-Value="selectedProduct.Price" />
+        </div>
+        <div>
+            <label>Quantity:</label>
+            <InputNumber @bind-Value="selectedProduct.StockQuantity" />
+        </div>
+        <div>
+            <label>Category:</label>
+            <InputText @bind-Value="selectedProduct.Category" />
+        </div>
+        <button type="submit">Save</button>
+        <button type="button" @onclick="CancelEdit">Cancel</button>
+    </EditForm>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Product Number</th>
+                <th>Name</th>
+                <th>Description</th>
+                <th>Price</th>
+                <th>Stock Quantity</th>
+                <th>Category</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var product in products)
+            {
+                <tr>
+                    <td>@product.ProductNumber</td>
+                    <td>@product.Name</td>
+                    <td>@product.Description</td>
+                    <td>@(product.Price.ToString("N2") + " kr")</td>
+                    <td>@product.StockQuantity</td>
+                    <td>@product.Category</td>
+                    <td>
+                        <button class="btn btn-primary me-2" @onclick="() => EditProduct(product)">Edit</button>
+                        <button class="btn btn-danger me-2" @onclick="() => DeleteProduct(product.ProductNumber)">Delete</button>
+                        @if (product.IsDiscontinued)
+                        {
+                            <button class="btn btn-success me-2" @onclick="() => ReactivateProduct(product.ProductNumber)">Reactivate</button>
+                        }
+                        else
+                        {
+                            <button class="btn btn-warning me-2" @onclick="() => DiscontinueProduct(product.ProductNumber)">Discontinue</button>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private IEnumerable<Product> products = new List<Product>();
+    private string message = string.Empty;
+    private bool isLoading = true;
+    private bool isEditing = false;
+    private Product? selectedProduct;
+    private bool isAdmin = false;
+
+
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadUserRole();
+            await LoadProducts();
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadUserRole()
+    {
+        var token = await AuthenticationService.GetToken();
+        if (!string.IsNullOrEmpty(token))
+        {
+            var role = AuthenticationService.GetRoleFromToken(token);
+            isAdmin = role == "Admin";
+        }
+    }
+
+    private async Task LoadProducts()
+    {
+        try
+        {
+            products = await ProductService.GetAllProducts();
+            isLoading = false;
+        }
+        catch
+        {
+            message = "Failed to load products. Please try again.";
+        }
+    }
+
+    private void NavigateToCreateProduct()
+    {
+        NavigationManager.NavigateTo("/createproduct", true);
+    }
+
+    private void EditProduct(Product product)
+    {
+        selectedProduct = product;
+        isEditing = true;
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        await ProductService.UpdateProduct(selectedProduct!);
+        await LoadProducts();
+        isEditing = false;
+    }
+
+    private void CancelEdit()
+    {
+        isEditing = false;
+    }
+
+    private async Task DeleteProduct(int productNumber)
+    {
+        await ProductService.DeleteProduct(productNumber);
+        await LoadProducts();
+    }
+
+    private async Task DiscontinueProduct(int productNumber)
+    {
+        await ProductService.DiscontinueProduct(productNumber);
+        await LoadProducts();
+    }
+
+    private async Task ReactivateProduct(int productNumber)
+    {
+        await ProductService.ReactivateProduct(productNumber);
+        await LoadProducts();
+    }
+}

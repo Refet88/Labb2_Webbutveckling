@@ -1,0 +1,226 @@
+﻿@page "/createorder"
+@using Blazor_Labb2_Webbutveckling.Models
+@using Blazor_Labb2_Webbutveckling.Models.Blazor_Labb2_Webbutveckling.Models
+@using Blazor_Labb2_Webbutveckling.Services
+@using System.Text.Json
+@inject ProductService ProductService
+@inject OrderService OrderService
+@inject CustomerService CustomerService
+@inject AuthenticationService AuthenticationService
+@rendermode InteractiveServer
+
+<h3>Create Order</h3>
+
+<h4>Available Products</h4>
+@if (isLoading)
+{
+    <p><em>Loading products...</em></p>
+}
+else if (products != null && products.Any())
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Product Number</th>
+                <th>Name</th>
+                <th>Category</th>
+                <th>Price</th>
+                <th>Quantity</th>
+                <th>Actions</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var product in products)
+            {
+                <tr>
+                    <td>@product.ProductNumber</td>
+                    <td>@product.Name</td>
+                    <td>@product.Category</td>
+                    <td>@product.Price</td>
+                    <td>
+                        <input type="number" min="0"
+                               value="@productSelections.GetValueOrDefault(product.ProductNumber, 0)"
+                               @oninput="(e) => UpdateProductSelection(product.ProductNumber, e.Value)"
+                               placeholder="Quantity"
+                               disabled="@product.IsDiscontinued" />
+                    </td>
+                    <td>
+                        <button @onclick="() => AddToOrder(product.ProductNumber)" class="btn btn-primary mt-0">
+                            Add
+                        </button>
+                        <button @onclick="() => RemoveFromOrder(product.ProductNumber)"
+                                class="btn btn-danger mt-0">
+                            Remove
+                        </button>
+                    </td>
+                    <td>
+                        @if (product.IsDiscontinued)
+                        {
+                            <span class="text-danger">Discontinued</span>
+                        }
+                        else
+                        {
+                            <span class="text-success">Available</span>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+else
+{
+    <p>No products available.</p>
+}
+
+<button @onclick="SubmitOrder" class="btn btn-success mt-3">
+    Submit Order
+</button>
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="alert @alertClass mt-3">
+        @message
+    </div>
+}
+
+@code {
+    private Order order = new();
+    private string message = string.Empty;
+    private string alertClass = "alert-primary";
+    private List<Product> products = new();
+    private Dictionary<int, int> productSelections = new();
+    private bool isInitialized = false;
+    private bool isLoading = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (isInitialized) return;
+        isInitialized = true;
+
+        isLoading = true;
+        try
+        {
+            products = await ProductService.GetAllProducts();
+            foreach (var product in products)
+            {
+                productSelections.TryAdd(product.ProductNumber, 0);
+            }
+        }
+        catch (Exception ex)
+        {
+            message = $"Failed to load products: {ex.Message}";
+            alertClass = "alert-danger";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void UpdateProductSelection(int productNumber, object? value)
+    {
+        if (value != null && int.TryParse(value.ToString(), out int quantity))
+        {
+            productSelections[productNumber] = quantity;
+        }
+    }
+
+    private void AddToOrder(int productNumber)
+    {
+        if (!productSelections.ContainsKey(productNumber))
+        {
+            productSelections[productNumber] = 1;
+        }
+        else
+        {
+            productSelections[productNumber]++;
+        }
+    }
+
+    private void RemoveFromOrder(int productNumber)
+    {
+        if (productSelections.ContainsKey(productNumber) && productSelections[productNumber] > 0)
+        {
+            productSelections[productNumber]--;
+
+            if (productSelections[productNumber] == 0)
+            {
+                productSelections.Remove(productNumber);
+            }
+        }
+    }
+
+    private async Task SubmitOrder()
+    {
+        if (productSelections.Count == 0 || productSelections.All(s => s.Value == 0))
+        {
+            message = "You must add at least one product to submit an order.";
+            alertClass = "alert-warning";
+            return;
+        }
+
+        try
+        {
+            var token = await AuthenticationService.GetToken();
+            var customerId = AuthenticationService.GetCustomerIdFromToken(token!);
+            Console.WriteLine($"CustomerId: {customerId}");
+
+            if (string.IsNullOrEmpty(token))
+            {
+                message = "Unable to retrieve token. Please log in.";
+                alertClass = "alert-danger";
+                return;
+            }
+
+            var role = AuthenticationService.GetRoleFromToken(token);
+            if (role != "Customer")
+            {
+                message = "Only customers can create orders.";
+                alertClass = "alert-danger";
+                return;
+            }
+
+            
+            if (customerId == null || customerId <= 0)
+            {
+                message = "Unable to retrieve customer ID from token. Please log in.";
+                alertClass = "alert-danger";
+                return;
+            }
+
+            var orderRequest = new OrderRequest
+                {
+                    CustomerId = customerId.Value,
+                    OrderItems = productSelections
+                        .Where(s => s.Value > 0)
+                        .Select(s => new OrderItemRequest
+                        {
+                            ProductNumber = s.Key,
+                            Quantity = s.Value
+                        }).ToList()
+                };
+
+            var response = await OrderService.AddOrder(orderRequest);
+
+            if (response.IsSuccessStatusCode)
+            {
+                message = "The order has been created!";
+                alertClass = "alert-success";
+                productSelections.Clear();
+            }
+            else
+            {
+                var errorDetails = await response.Content.ReadAsStringAsync();
+                message = $"Order failed! {errorDetails}";
+                alertClass = "alert-danger";
+            }
+        }
+        catch (Exception ex)
+        {
+            message = $"Error creating order: {ex.Message}";
+            alertClass = "alert-danger";
+        }
+    }
+}

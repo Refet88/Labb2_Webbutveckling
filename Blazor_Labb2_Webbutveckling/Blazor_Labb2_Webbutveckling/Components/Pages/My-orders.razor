@@ -1,0 +1,92 @@
+﻿@page "/my-orders"
+@using Blazor_Labb2_Webbutveckling.Models
+@using Blazor_Labb2_Webbutveckling.Services
+@inject OrderService OrderService
+@inject AuthenticationService AuthenticationService
+@inject NavigationManager NavigationManager
+@rendermode InteractiveServer
+
+<h3>My Orders</h3>
+
+<p>@testResult</p>
+
+@if (!isConnected)
+{
+    <p><em>Unable to connect to API.</em></p>
+}
+else if (orders == null)
+{
+    <p><em>Loading...</em></p>
+}
+else if (!orders.Any())
+{
+    <p><em>No orders placed yet.</em></p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Order Id</th>
+                <th>Customer Id</th>
+                <th>Order Date</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var order in orders)
+            {
+                <tr>
+                    <td>@order.OrderId</td>
+                    <td>@order.CustomerId</td>
+                    <td>@order.OrderDate.ToString("yyyy-MM-dd")</td>
+                    <td>
+                        <button class="btn btn-info" @onclick="() => NavigateToDetails(order.OrderId)">Details</button>
+                        <button class="btn btn-danger" @onclick="() => DeleteOrder(order.OrderId)">Delete</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private IEnumerable<Order> orders = new List<Order>();
+    private bool isConnected;
+    private string testResult = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var customerId = await AuthenticationService.GetCurrentUserId();
+            orders = await OrderService.GetOrdersByCustomerId(customerId);
+            isConnected = true;
+        }
+        catch (Exception ex)
+        {
+            isConnected = false;
+            testResult = $"Error: {ex.Message}";
+        }
+    }
+
+
+    private void NavigateToDetails(int orderId)
+    {
+        NavigationManager.NavigateTo($"/orderdetails/{orderId}", true);
+    }
+
+    private async Task DeleteOrder(int orderId)
+    {
+        try
+        {
+            await OrderService.DeleteOrder(orderId);
+            var userId = await AuthenticationService.GetCurrentUserId();
+            orders = await OrderService.GetOrdersByCustomerId(userId);
+        }
+        catch (Exception ex)
+        {
+            testResult = $"Error: {ex.Message}";
+        }
+    }
+}

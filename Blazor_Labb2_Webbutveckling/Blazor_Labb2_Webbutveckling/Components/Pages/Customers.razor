@@ -1,0 +1,105 @@
+﻿@page "/customers"
+@using Blazor_Labb2_Webbutveckling.Models
+@using Blazor_Labb2_Webbutveckling.Services
+@inject CustomerService CustomerService
+@rendermode InteractiveServer
+
+<h3>Search Customers</h3>
+
+<input @bind="searchQuery" @bind:event="oninput" placeholder="Enter email to search" />
+<button class="btn btn-primary" @onclick="CustomerSearch">Search</button>
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <p class="text-danger mt-2">@message</p>
+}
+
+@if (customers != null && customers.Any())
+{
+    <table class="table table-striped mt-3">
+        <thead>
+            <tr>
+                <th>First Name</th>
+                <th>Last Name</th>
+                <th>Email</th>
+                <th>Phone Number</th>
+                <th>Address</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var customer in customers)
+            {
+                <tr>
+                    <td>@customer.FirstName</td>
+                    <td>@customer.LastName</td>
+                    <td>@customer.Email</td>
+                    <td>@customer.PhoneNumber</td>
+                    <td>@customer.Street, @customer.ZipCode, @customer.City</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+else if (string.IsNullOrEmpty(message))
+{
+    <p class="mt-3">No customers found.</p>
+}
+
+@code {
+    private string searchQuery = string.Empty;
+    private List<Customer> customers = new();
+    private string message = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            customers = await CustomerService.GetAllCustomers();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error in OnInitializedAsync: {ex.Message}");
+            message = "Failed to load customers.";
+        }
+        finally
+        {
+            StateHasChanged();
+        }
+    }
+
+    private async Task CustomerSearch()
+    {
+        try
+        {
+            message = string.Empty;
+
+            if (string.IsNullOrWhiteSpace(searchQuery))
+            {
+                customers = await CustomerService.GetAllCustomers();
+            }
+            else
+            {
+                var customer = await CustomerService.SearchCustomerByEmail(searchQuery.Trim());
+
+                if (customer != null)
+                {
+                    customers = new List<Customer> { customer };
+                }
+                else
+                {
+                    customers.Clear();
+                    message = $"No customer found with the email: {searchQuery}";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error searching for customer: {ex.Message}");
+            message = "An error occurred while searching.";
+        }
+        finally
+        {
+            StateHasChanged();
+        }
+    }
+}

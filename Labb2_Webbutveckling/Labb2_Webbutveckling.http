@@ -1,0 +1,6 @@
+@Labb2_Webbutveckling_HostAddress = http://localhost:5082
+
+GET {{Labb2_Webbutveckling_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
