@@ -48,6 +48,57 @@ else if (isEditing)
             <label>Category:</label>
             <InputText @bind-Value="selectedProduct.Category" />
         </div>
+
+        @if (isAdmin)
+        {
+            <hr />
+            <h5>Product images</h5>
+
+            @if (productImages.Any())
+            {
+                <div class="d-flex flex-wrap gap-2 mb-3">
+                    @foreach (var img in productImages)
+                    {
+                        <div class="border rounded p-2 text-center" style="width: 130px;">
+                            <img src="@ImageSrc(img.ImageUrl)" alt="Product"
+                                 style="max-width: 120px; max-height: 120px; object-fit: cover;" />
+                            @if (img.IsPrimary)
+                            {
+                                <small class="d-block">Primary</small>
+                            }
+                            <button type="button" class="btn btn-sm btn-danger mt-1"
+                                    @onclick="() => MarkImageForDeletion(img.Id)">
+                                Delete
+                            </button>
+                        </div>
+                    }
+                </div>
+            }
+
+            <div class="form-group mt-2">
+                <label>Add images</label>
+                <InputFile OnChange="OnNewImagesSelected" multiple accept=".jpg,.jpeg,.png,.webp" />
+            </div>
+
+            @if (pendingNewImages.Any())
+            {
+                <div class="d-flex flex-wrap gap-2 mt-2">
+                    @foreach (var item in pendingNewImages)
+                    {
+                        <div class="border rounded p-2 text-center" style="width: 130px;">
+                            <img src="@item.PreviewUrl" alt="@item.File.Name"
+                                 style="max-width: 120px; max-height: 120px; object-fit: cover;" />
+                            <small class="d-block text-truncate">@item.File.Name</small>
+                            <button type="button" class="btn btn-sm btn-outline-danger mt-1"
+                                    @onclick="() => RemovePendingNew(item)">
+                                Remove
+                            </button>
+                        </div>
+                    }
+                </div>
+            }
+        }
+
         <button type="submit">Save</button>
         <button type="button" @onclick="CancelEdit">Cancel</button>
     </EditForm>
@@ -57,6 +108,7 @@ else
     <table class="table">
         <thead>
             <tr>
+                <th></th>
                 <th>Product Number</th>
                 <th>Name</th>
                 <th>Description</th>
@@ -70,6 +122,22 @@ else
             @foreach (var product in products)
             {
                 <tr>
+                    <td>
+                        @{
+                            var primaryImage = product.Images?
+                            .FirstOrDefault(i => i.IsPrimary) ?? product.Images?.OrderBy(i => i.SortOrder).FirstOrDefault();
+                        }
+                        @if (primaryImage != null)
+                        {
+                            <img src="@ImageSrc(primaryImage.ImageUrl)" alt="@product.Name"
+                            style="max-width: 80px; max-height: 80px; object-fit: cover;" />
+                        }
+                        else
+                        {
+                            <img src="/images/Noimage.png" alt="Bild kommer snart"
+                                 style="max-width: 80px; max-height: 80px; object-fit: contain; opacity: 0.7;" />
+                        }
+                    </td>
                     <td>@product.ProductNumber</td>
                     <td>@product.Name</td>
                     <td>@product.Description</td>
@@ -77,7 +145,7 @@ else
                     <td>@product.StockQuantity</td>
                     <td>@product.Category</td>
                     <td>
-                        <button class="btn btn-primary me-2" @onclick="() => EditProduct(product)">Edit</button>
+                        <button class="btn btn-primary me-2" @onclick="async () => await EditProduct(product)">Edit</button>
                         <button class="btn btn-danger me-2" @onclick="() => DeleteProduct(product.ProductNumber)">Delete</button>
                         @if (product.IsDiscontinued)
                         {
@@ -101,6 +169,19 @@ else
     private bool isEditing = false;
     private Product? selectedProduct;
     private bool isAdmin = false;
+
+    private const string ApiBaseUrl = "https://localhost:7018";
+
+    private Product? productSnapshot;
+    private List<ProductImage> productImages = new();
+    private readonly List<int> imageIdsToDelete = new();
+    private readonly List<PendingFileItem> pendingNewImages = new();
+
+    private sealed class PendingFileItem
+    {
+        public IBrowserFile File { get; init; } = default!;
+        public string PreviewUrl { get; init; } = string.Empty;
+    }
 
 
 
@@ -142,22 +223,78 @@ else
         NavigationManager.NavigateTo("/createproduct", true);
     }
 
-    private void EditProduct(Product product)
+    private async Task EditProduct(Product product)
     {
-        selectedProduct = product;
+        selectedProduct = CloneProduct(product);
+        productSnapshot = CloneProduct(product);
+        imageIdsToDelete.Clear();
+        pendingNewImages.Clear();
+        productImages = await ProductService.GetProductImagesAsync(product.ProductNumber);
         isEditing = true;
+        message = string.Empty;
     }
 
     private async Task HandleValidSubmit()
     {
-        await ProductService.UpdateProduct(selectedProduct!);
-        await LoadProducts();
-        isEditing = false;
+        if (selectedProduct == null || productSnapshot == null)
+            return;
+
+        var productChanged = HasProductChanges(selectedProduct, productSnapshot);
+        var imagesChanged = imageIdsToDelete.Count > 0 || pendingNewImages.Count > 0;
+
+        if (!productChanged && !imagesChanged)
+        {
+            message = "Nothing to save.";
+            return;
+        }
+
+        try
+        {
+            if (productChanged)
+                await ProductService.UpdateProduct(selectedProduct);
+
+            var productNumber = selectedProduct.ProductNumber;
+            var failed = 0;
+
+            foreach (var imageId in imageIdsToDelete)
+            {
+                if (!await ProductService.DeleteProductImageAsync(productNumber, imageId))
+                    failed++;
+            }
+
+            foreach (var item in pendingNewImages)
+            {
+                await using var stream = item.File.OpenReadStream(maxAllowedSize: 5_000_000);
+                var uploaded = await ProductService.UploadProductImageAsync(
+                    productNumber, stream, item.File.Name);
+                if (uploaded == null)
+                    failed++;
+            }
+
+            await LoadProducts();
+            isEditing = false;
+            imageIdsToDelete.Clear();
+            pendingNewImages.Clear();
+
+            message = failed == 0
+                ? "Product and images saved."
+                : "Saved, but some image changes failed.";
+        }
+        catch (Exception ex)
+        {
+            message = ex.Message;
+        }
     }
 
     private void CancelEdit()
     {
         isEditing = false;
+        selectedProduct = null;
+        productSnapshot = null;
+        productImages.Clear();
+        imageIdsToDelete.Clear();
+        pendingNewImages.Clear();
+        message = string.Empty;
     }
 
     private async Task DeleteProduct(int productNumber)
@@ -176,5 +313,72 @@ else
     {
         await ProductService.ReactivateProduct(productNumber);
         await LoadProducts();
+    }
+
+    private string ImageSrc(string url) =>
+    url.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+        ? url
+        : ApiBaseUrl + url;
+
+    private static Product CloneProduct(Product p) => new()
+    {
+        ProductNumber = p.ProductNumber,
+        Name = p.Name,
+        Description = p.Description,
+        Price = p.Price,
+        StockQuantity = p.StockQuantity,
+        Category = p.Category,
+        IsDiscontinued = p.IsDiscontinued
+    };
+
+    private static bool HasProductChanges(Product current, Product snapshot)
+    {
+        return current.Name != snapshot.Name
+        || current.Description != snapshot.Description
+        || current.Price != snapshot.Price
+        || current.StockQuantity != snapshot.StockQuantity
+        || current.Category != snapshot.Category
+        || current.IsDiscontinued != snapshot.IsDiscontinued;
+    }
+
+    private void MarkImageForDeletion(int imageId)
+    {
+        if (!imageIdsToDelete.Contains(imageId))
+        {
+            imageIdsToDelete.Add(imageId);
+        }
+
+        productImages = productImages.Where(i => i.Id != imageId).ToList();
+    }
+
+    private async Task OnNewImagesSelected(InputFileChangeEventArgs e)
+    {
+        foreach (var file in e.GetMultipleFiles(maximumFileCount: 10))
+        {
+            if (pendingNewImages.Any(p => p.File.Name == file.Name && p.File.Size == file.Size))
+                continue;
+
+            await using var stream = file.OpenReadStream(maxAllowedSize: 5_000_000);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+
+            var contentType = string.IsNullOrWhiteSpace(file.ContentType)
+                ? "image/jpeg"
+                : file.ContentType;
+
+            var base64 = Convert.ToBase64String(ms.ToArray());
+            var previewUrl = $"data:{contentType};base64,{base64}";
+
+            pendingNewImages.Add(new PendingFileItem
+            {
+                File = file,
+                PreviewUrl = previewUrl
+            });
+        }
+    }
+
+    private void RemovePendingNew(PendingFileItem item)
+    {
+        pendingNewImages.Remove(item);
     }
 }

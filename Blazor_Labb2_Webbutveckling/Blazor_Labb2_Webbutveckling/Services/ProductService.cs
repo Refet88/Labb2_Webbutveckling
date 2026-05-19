@@ -1,8 +1,6 @@
 ﻿using Blazor_Labb2_Webbutveckling.Models;
-using System.Net.Http;
-using System.Net.Http.Json;
-using System.Threading.Tasks;
-using System.Collections.Generic;
+using Microsoft.AspNetCore.Components.Forms;
+using System.Net.Http.Headers;
 
 namespace Blazor_Labb2_Webbutveckling.Services
 {
@@ -46,7 +44,8 @@ namespace Blazor_Labb2_Webbutveckling.Services
         public async Task<bool> AddProduct(Product product)
         {
             var httpClient = await _authService.GetAuthorizedHttpClient();
-            var response = await httpClient.PostAsJsonAsync("api/products", product);
+            var payload = ProductUpdateDto.FromProduct(product);
+            var response = await httpClient.PostAsJsonAsync("api/products", payload);
 
             if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
             {
@@ -64,7 +63,8 @@ namespace Blazor_Labb2_Webbutveckling.Services
         public async Task UpdateProduct(Product product)
         {
             var httpClient = await _authService.GetAuthorizedHttpClient();
-            var response = await httpClient.PutAsJsonAsync($"api/products/{product.ProductNumber}", product);
+            var payload = ProductUpdateDto.FromProduct(product);
+            var response = await httpClient.PutAsJsonAsync($"api/products/{product.ProductNumber}", payload);
 
             if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
             {
@@ -140,6 +140,71 @@ namespace Blazor_Labb2_Webbutveckling.Services
 
             response.EnsureSuccessStatusCode();
             return true;
+        }
+
+        public async Task ApplyImageChangesAsync(
+        int productNumber,
+        IEnumerable<int> imageIdsToDelete,
+        IEnumerable<IBrowserFile> filesToUpload,
+        bool setFirstAsPrimary,
+        int currentImageCount)
+        {
+            foreach (var imageId in imageIdsToDelete)
+            {
+                if (!await DeleteProductImageAsync(productNumber, imageId))
+                    throw new HttpRequestException($"Could not delete image {imageId}.");
+            }
+
+            foreach (var file in filesToUpload)
+            {
+                await using var stream = file.OpenReadStream(maxAllowedSize: 5_000_000);
+                var uploaded = await UploadProductImageAsync(productNumber, stream, file.Name);
+                if (uploaded == null)
+                    throw new HttpRequestException($"Could not upload image '{file.Name}'.");
+            }
+        }
+
+        public async Task<List<ProductImage>> GetProductImagesAsync(int productNumber)
+        {
+            var response = await _httpClient.GetAsync($"api/products/{productNumber}/images");
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<List<ProductImage>>() ?? new List<ProductImage>();
+        }
+
+        public async Task<ProductImage?> UploadProductImageAsync(
+            int productNumber,
+            Stream fileStream,
+            string fileName)
+        {
+            var httpClient = await _authService.GetAuthorizedHttpClient();
+
+            using var content = new MultipartFormDataContent();
+            var streamContent = new StreamContent(fileStream);
+
+            var extension = Path.GetExtension(fileName).ToLowerInvariant();
+            var contentType = extension switch
+            {
+                ".png" => "image/png",
+                ".webp" => "image/webp",
+                ".avif" => "image/avif",
+                _ => "image/jpeg"
+            };
+            streamContent.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+            content.Add(streamContent, "file", fileName);
+
+            var response = await httpClient.PostAsync($"api/products/{productNumber}/images", content);
+
+            if (!response.IsSuccessStatusCode)
+                return null;
+
+            return await response.Content.ReadFromJsonAsync<ProductImage>();
+        }
+
+        public async Task<bool> DeleteProductImageAsync(int productNumber, int imageId)
+        {
+            var httpClient = await _authService.GetAuthorizedHttpClient();
+            var response = await httpClient.DeleteAsync($"api/products/{productNumber}/images/{imageId}");
+            return response.IsSuccessStatusCode;
         }
 
         public class StockUpdateRequest

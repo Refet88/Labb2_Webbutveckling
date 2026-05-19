@@ -52,6 +52,31 @@
         <InputText id="category" class="form-control" @bind-Value="newProduct.Category" />
     </div>
 
+    <div class="form-group">
+        <label>Product images (optional)</label>
+        <InputFile OnChange="OnFilesSelected" multiple accept=".jpg,.jpeg,.png,.webp" />
+    </div>
+
+    @if (pendingItems.Any())
+    {
+        <div class="d-flex flex-wrap gap-2 mt-2">
+            @foreach (var item in pendingItems)
+            {
+                <div class="border rounded p-2 text-center" style="width: 130px;">
+                    <img src="@item.PreviewUrl"
+                         alt="@item.File.Name"
+                         style="max-width: 120px; max-height: 120px; object-fit: cover; display: block; margin: 0 auto;" />
+                    <small class="d-block text-truncate mt-1" title="@item.File.Name">@item.File.Name</small>
+                    <button type="button"
+                            class="btn btn-sm btn-outline-danger mt-1"
+                            @onclick="() => RemovePending(item)">
+                        Remove
+                    </button>
+                </div>
+            }
+        </div>
+    }
+
     <button type="submit" class="btn btn-primary">Create</button>
 </EditForm>
 
@@ -59,6 +84,13 @@
     private Product newProduct = new Product();
     private string message = string.Empty;
     private bool isDuplicate = false;
+    private readonly List<PendingFileItem> pendingItems = new();
+
+    private sealed class PendingFileItem
+    {
+        public IBrowserFile File { get; init; } = default!;
+        public string PreviewUrl { get; init; } = string.Empty;
+    }
 
     private string GetProductNumberCssClass()
     {
@@ -72,29 +104,81 @@
         {
             var success = await ProductService.AddProduct(newProduct);
 
-            if (success)
-            {
-                message = $"Product '{newProduct.Name}' was successfully added!";
-                isDuplicate = false;
-            }
-            else
+            if (!success)
             {
                 message = $"Failed to add product. ProductNumber {newProduct.ProductNumber} already exists.";
                 isDuplicate = true;
+                return;
             }
 
-            Console.WriteLine(message);
+            isDuplicate = false;
+
+            if (!pendingItems.Any())
+            {
+                message = $"Product '{newProduct.Name}' was successfully added!";
+                return;
+            }
+
+            var failed = 0;
+            foreach (var item in pendingItems)
+            {
+                await using var stream = item.File.OpenReadStream(maxAllowedSize: 5_000_000);
+                var uploaded = await ProductService.UploadProductImageAsync(
+                    newProduct.ProductNumber,
+                    stream,
+                    item.File.Name);
+
+                if (uploaded == null)
+                    failed++;
+            }
+
+            if (failed == 0)
+                message = $"Product '{newProduct.Name}' and all images were saved.";
+            else
+                message = $"Product '{newProduct.Name}' was created, but {failed} image(s) could not be uploaded. You can add them under Edit.";
+
+            pendingItems.Clear();
         }
         catch (Exception ex)
         {
             message = $"Exception occurred: {ex.Message}";
             isDuplicate = false;
-            Console.WriteLine(message);
         }
     }
 
     private void NavigateBack()
     {
         NavigationManager.NavigateTo("/products", true);
+    }
+
+    private async Task OnFilesSelected(InputFileChangeEventArgs e)
+    {
+        foreach (var file in e.GetMultipleFiles(maximumFileCount: 10))
+        {
+            if (pendingItems.Any(p => p.File.Name == file.Name && p.File.Size == file.Size))
+                continue;
+
+            await using var stream = file.OpenReadStream(maxAllowedSize: 5_000_000);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+
+            var contentType = string.IsNullOrWhiteSpace(file.ContentType)
+                ? "image/jpeg"
+                : file.ContentType;
+
+            var base64 = Convert.ToBase64String(ms.ToArray());
+            var previewUrl = $"data:{contentType};base64,{base64}";
+
+            pendingItems.Add(new PendingFileItem
+            {
+                File = file,
+                PreviewUrl = previewUrl
+            });
+        }
+    }
+
+    private void RemovePending(PendingFileItem item)
+    {
+        pendingItems.Remove(item);
     }
 }

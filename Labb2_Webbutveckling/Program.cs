@@ -111,6 +111,7 @@ builder.Services.AddScoped<ICustomerRepository, CustomerRepository>();
 builder.Services.AddScoped<IProductRepository, ProductRepository>();
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+builder.Services.AddScoped<IImageRepository, ImageRepository>();
 builder.Logging.AddConsole();
 builder.Logging.AddDebug();
 
@@ -145,8 +146,10 @@ app.Use(async (context, next) =>
 });
 
 app.UseCors("DefaultCorsPolicy");
+app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
+
 app.MapControllers();
 
 app.Run();

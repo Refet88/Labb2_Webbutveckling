@@ -21,6 +21,7 @@ else if (products != null && products.Any())
     <table class="table">
         <thead>
             <tr>
+                <th></th>
                 <th>Product Number</th>
                 <th>Name</th>
                 <th>Category</th>
@@ -34,6 +35,22 @@ else if (products != null && products.Any())
             @foreach (var product in products)
             {
                 <tr>
+                    <td>
+                        @{
+                            var primaryImage = product.Images?.FirstOrDefault(i => i.IsPrimary)
+                                ?? product.Images?.OrderBy(i => i.SortOrder).FirstOrDefault();
+                        }
+                        @if (primaryImage != null)
+                        {
+                            <img src="@ImageSrc(primaryImage.ImageUrl)" alt="@product.Name"
+                                 style="max-width: 80px; max-height: 80px; object-fit: cover;" />
+                        }
+                        else
+                        {
+                            <img src="/images/Noimage.png" alt="Bild kommer snart"
+                                 style="max-width: 80px; max-height: 80px; object-fit: contain; opacity: 0.7;" />
+                        }
+                    </td>
                     <td>@product.ProductNumber</td>
                     <td>@product.Name</td>
                     <td>@product.Category</td>
@@ -93,6 +110,13 @@ else
     private Dictionary<int, int> productSelections = new();
     private bool isInitialized = false;
     private bool isLoading = false;
+
+    private const string ApiBaseUrl = "https://localhost:7018";
+
+    private string ImageSrc(string url) =>
+        url.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+            ? url
+            : ApiBaseUrl + url;
 
     protected override async Task OnInitializedAsync()
     {

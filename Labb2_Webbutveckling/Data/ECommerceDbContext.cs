@@ -15,6 +15,7 @@ namespace Labb2_Webbutveckling.Data
         public DbSet<Order> Orders { get; set; }
         public DbSet<OrderDetails> OrderDetails { get; set; }
         public DbSet<Admin> Admins { get; set; }
+        public DbSet<ProductImage> ProductImages { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -60,6 +61,12 @@ namespace Labb2_Webbutveckling.Data
             modelBuilder.Entity<Customer>()
                 .HasIndex(c => c.PhoneNumber)
                 .IsUnique();
+
+            modelBuilder.Entity<ProductImage>()
+                .HasOne(pi => pi.Product)
+                .WithMany(p => p.Images)
+                .HasForeignKey(pi => pi.ProductNumber)
+                .OnDelete(DeleteBehavior.Cascade);
 
         }
     }

@@ -21,5 +21,7 @@ namespace Labb2_Webbutveckling.Models
 
         [JsonIgnore]
         public List<OrderDetails> OrderItems { get; set; } = new List<OrderDetails>();
+
+        public List<ProductImage> Images { get; set; } = new List<ProductImage>();
     }
 }

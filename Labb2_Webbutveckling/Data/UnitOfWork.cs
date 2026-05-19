@@ -7,6 +7,7 @@
         public ICustomerRepository CustomerRepository { get; }
         public IOrderRepository OrderRepository { get; }
         public IAdminRepository AdminRepository { get; }
+        public IImageRepository ImageRepository { get; }
 
         public UnitOfWork(ECommerceDbContext context)
         {
@@ -15,6 +16,7 @@
             CustomerRepository = new CustomerRepository(_context);
             OrderRepository = new OrderRepository(_context);
             AdminRepository = new AdminRepository(_context);
+            ImageRepository = new ImageRepository(_context);
         }
 
 

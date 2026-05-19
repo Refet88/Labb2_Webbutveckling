@@ -17,7 +17,9 @@ public class ProductRepository : IProductRepository
 
     public async Task<IEnumerable<Product>> GetAllProductsAsync()
     {
-        return await _context.Products.ToListAsync() ?? new List<Product>();
+        return await _context.Products
+            .Include(p => p.Images)
+            .ToListAsync() ?? new List<Product>();
     }
 
     public async Task<Product?> GetProductByProductNumberAsync(int productNumber)
@@ -29,10 +31,13 @@ public class ProductRepository : IProductRepository
     {
         if (string.IsNullOrWhiteSpace(query))
         {
-            return await _context.Products.ToListAsync();
+            return await _context.Products
+                .Include(p => p.Images)
+                .ToListAsync();
         }
 
         return await _context.Products
+            .Include(p => p.Images)
             .Where(p => p.Name!.Contains(query) || p.ProductNumber.ToString().Contains(query))
             .ToListAsync() ?? new List<Product>();
     }

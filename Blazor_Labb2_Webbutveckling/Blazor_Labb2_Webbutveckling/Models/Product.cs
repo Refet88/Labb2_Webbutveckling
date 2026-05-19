@@ -1,4 +1,5 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using Blazor_Labb2_Webbutveckling.Models;
+using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 
 public class Product
@@ -19,4 +20,6 @@ public class Product
 
     [JsonPropertyName("isDiscontinued")]
     public bool IsDiscontinued { get; set; } = false;
+
+    public List<ProductImage> Images { get; set; } = new();
 }

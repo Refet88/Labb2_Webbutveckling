@@ -12,10 +12,15 @@ namespace Labb2_Webbutveckling.Controllers
     public class ProductsController : ControllerBase
     {
         private readonly IUnitOfWork _unitOfWork;
+        private readonly IWebHostEnvironment _env;
 
-        public ProductsController(IUnitOfWork unitOfWork)
+        private static readonly string[] AllowedImageExtensions = { ".jpg", ".jpeg", ".png", ".webp" };
+        private const long MaxImageSizeBytes = 5 * 1024 * 1024; // 5 MB
+
+        public ProductsController(IUnitOfWork unitOfWork, IWebHostEnvironment env)
         {
             _unitOfWork = unitOfWork;
+            _env = env;
         }
 
         /// <summary>
@@ -255,6 +260,127 @@ namespace Labb2_Webbutveckling.Controllers
             await _unitOfWork.ProductRepository.UpdateProductAsync(id, product);
 
             return Ok(product);
+        }
+
+        /// <summary>
+        /// Retrieves all images for a product by its unique product number.
+        /// </summary>
+        /// <param name="id">The unique identifier (product number) of the product whose images to retrieve.</param>
+        /// <response code="200">Returns the list of product images ordered by sort order.</response>
+        /// <response code="404">If the product was not found.</response>
+        [HttpGet("{id}/images", Name = "GetProductImages")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> GetProductImages(int id)
+        {
+            var product = await _unitOfWork.ProductRepository.GetProductByProductNumberAsync(id);
+            if (product == null)
+                return NotFound("Product not found.");
+
+            var images = await _unitOfWork.ImageRepository.GetImagesByProductNumberAsync(id);
+            var ordered = images.OrderBy(i => i.SortOrder).ToList();
+            return Ok(ordered);
+        }
+
+        /// <summary>
+        /// Uploads an image for a product. Uses multipart/form-data with form field name <c>file</c>.
+        /// </summary>
+        /// <param name="id">The unique identifier (product number) of the product to attach the image to.</param>
+        /// <param name="file">The image file to upload.</param>
+        /// <response code="201">The image was successfully uploaded and saved.</response>
+        /// <response code="400">If no file was uploaded, the file is too large, or the file type is not allowed.</response>
+        /// <response code="404">If the product was not found.</response>
+        [HttpPost("{id}/images", Name = "UploadProductImage")]
+        [Authorize(Roles = "Admin")]
+        [ProducesResponseType(StatusCodes.Status201Created)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> UploadProductImage(int id, IFormFile file)
+        {
+            var product = await _unitOfWork.ProductRepository.GetProductByProductNumberAsync(id);
+            if (product == null)
+                return NotFound("Product not found.");
+
+            if (file == null || file.Length == 0)
+                return BadRequest("No file uploaded.");
+
+            if (file.Length > MaxImageSizeBytes)
+                return BadRequest("File is too large (max 5 MB).");
+
+            var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+            if (!AllowedImageExtensions.Contains(extension))
+                return BadRequest("Invalid file type. Allowed: jpg, jpeg, png, webp.");
+
+            var uploadDir = Path.Combine(_env.WebRootPath, "uploads", "products", id.ToString());
+            Directory.CreateDirectory(uploadDir);
+
+            var fileName = $"{Guid.NewGuid()}{extension}";
+            var physicalPath = Path.Combine(uploadDir, fileName);
+
+            await using (var stream = new FileStream(physicalPath, FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+
+            var existingImages = (await _unitOfWork.ImageRepository.GetImagesByProductNumberAsync(id)).ToList();
+            var isFirstImage = existingImages.Count == 0;
+
+            var productImage = new ProductImage
+            {
+                ProductNumber = id,
+                ImageUrl = $"/uploads/products/{id}/{fileName}",
+                IsPrimary = isFirstImage,
+                SortOrder = existingImages.Count
+            };
+
+            await _unitOfWork.ImageRepository.AddImageAsync(productImage);
+
+            return CreatedAtAction(
+                nameof(GetProductImages),
+                new { id },
+                productImage);
+        }
+
+        /// <summary>
+        /// Deletes a product image by its unique image ID (removes the database record and the file from disk).
+        /// </summary>
+        /// <param name="id">The unique identifier (product number) of the product that owns the image.</param>
+        /// <param name="imageId">The unique identifier of the image to delete.</param>
+        /// <response code="204">The image was successfully deleted.</response>
+        /// <response code="404">If the product or image was not found, or the image does not belong to the product.</response>
+        [HttpDelete("{id}/images/{imageId}", Name = "DeleteProductImage")]
+        [Authorize(Roles = "Admin")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> DeleteProductImage(int id, int imageId)
+        {
+            var product = await _unitOfWork.ProductRepository.GetProductByProductNumberAsync(id);
+            if (product == null)
+                return NotFound("Product not found.");
+
+            var image = await _unitOfWork.ImageRepository.GetImageByIdAsync(imageId);
+            if (image == null || image.ProductNumber != id)
+                return NotFound("Image not found.");
+
+            var relativePath = image.ImageUrl.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
+            var physicalPath = Path.Combine(_env.WebRootPath, relativePath);
+            if (System.IO.File.Exists(physicalPath))
+                System.IO.File.Delete(physicalPath);
+
+            var wasPrimary = image.IsPrimary;
+            await _unitOfWork.ImageRepository.DeleteImageAsync(imageId);
+
+            if (wasPrimary)
+            {
+                var remaining = (await _unitOfWork.ImageRepository.GetImagesByProductNumberAsync(id))
+                    .OrderBy(i => i.SortOrder)
+                    .ToList();
+
+                if (remaining.Count > 0)
+                    await _unitOfWork.ImageRepository.SetPrimaryImageAsync(id, remaining[0].Id);
+            }
+
+            return NoContent();
         }
 
     }
