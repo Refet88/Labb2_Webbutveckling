@@ -1,17 +1,16 @@
 ﻿@using Blazor_Labb2_Webbutveckling.Services
 @inject AuthenticationService AuthenticationService
 @inject NavigationManager NavigationManager
-@rendermode InteractiveServer
 
 <div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
-        <a class="navbar-brand" href="">Blazor_Övning1</a>
+        <a class="navbar-brand" href="">WebShop</a>
     </div>
 </div>
 
 <input type="checkbox" title="Navigation menu" class="navbar-toggler" />
 
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+<div class="nav-scrollable">
     <nav class="flex-column">
         @if (!isAdmin && !isCustomer)
         {
@@ -25,6 +24,9 @@
         }
         else
         {
+            <div class="nav-item px-3 mb-2" @onclick:stopPropagation="true">
+                <ProductSearchBox IsAdmin="isAdmin" />
+            </div>
 
             @if (isAdmin)
             {
@@ -46,6 +48,7 @@
                     </NavLink>
                 </div>
             }
+
             @if (isCustomer)
             {
                 <div class="nav-item px-3">
@@ -74,22 +77,13 @@
             }
 
             <div class="nav-item px-3">
-                <NavLink class="nav-link" href="searchproducts">
-                    <span class="bi bi-search" aria-hidden="true"></span> Search Products
-                </NavLink>
-            </div>
-
-            <div class="nav-item px-3">
                 <button class="btn btn-danger w-100" @onclick="Logout">Logga ut</button>
             </div>
+
             <div class="nav-item px-3 text-light">
                 @if (!string.IsNullOrEmpty(userName))
                 {
-                    <p>Logged in as: @userName</p>
-                }
-                else
-                {
-                    <p>Not logged in</p>
+                    <p class="small mb-0">Inloggad: @userName</p>
                 }
             </div>
         }
@@ -97,56 +91,44 @@
 </div>
 
 @code {
-
-    private bool isAdmin = false;
-    private bool isCustomer = false;
+    private bool isAdmin;
+    private bool isCustomer;
     private string? userName;
-
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        if (!firstRender)
         {
-            var token = await AuthenticationService.GetToken();
-            Console.WriteLine($"??Initial Token: {token}");
-            userName = AuthenticationService.GetNameFromToken(token!);
+            return;
+        }
 
-            if (string.IsNullOrEmpty(token))
+        var token = await AuthenticationService.GetToken();
+        userName = AuthenticationService.GetNameFromToken(token ?? string.Empty);
+
+        if (string.IsNullOrEmpty(token))
+        {
+            await AuthenticationService.ClearToken();
+            isAdmin = false;
+            isCustomer = false;
+        }
+        else
+        {
+            var role = AuthenticationService.GetRoleFromToken(token);
+            if (string.IsNullOrEmpty(role))
             {
                 await AuthenticationService.ClearToken();
-                Console.WriteLine("??No token found. Ready for login.");
+                isAdmin = false;
+                isCustomer = false;
             }
             else
             {
-                try
-                {
-                    var role = AuthenticationService.GetRoleFromToken(token);
-                    if (string.IsNullOrEmpty(role))
-                    {
-                        Console.WriteLine("No role found in token. Clearing token...");
-                        await AuthenticationService.ClearToken();
-                        token = null;
-                    }
-                    else
-                    {
-                        Console.WriteLine($"Role from Token: {role}");
-                        isAdmin = role == "Admin";
-                        isCustomer = role == "Customer";
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error processing token: {ex.Message}. Clearing token...");
-                    await AuthenticationService.ClearToken();
-                    token = null;
-                }
+                isAdmin = role == "Admin";
+                isCustomer = role == "Customer";
             }
-
-            StateHasChanged();
         }
+
+        StateHasChanged();
     }
-
-
 
     public async Task Logout()
     {

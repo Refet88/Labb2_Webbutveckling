@@ -1,4 +1,4 @@
-﻿using Labb2_Webbutveckling.Data;
+using Labb2_Webbutveckling.Data;
 using Labb2_Webbutveckling.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;

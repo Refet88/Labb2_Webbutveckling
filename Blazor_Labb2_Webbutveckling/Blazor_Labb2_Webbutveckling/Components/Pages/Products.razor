@@ -1,6 +1,7 @@
 ﻿@page "/products"
 @using Blazor_Labb2_Webbutveckling.Models
 @using Blazor_Labb2_Webbutveckling.Services
+@using Microsoft.AspNetCore.WebUtilities
 @inject ProductService ProductService
 @inject NavigationManager NavigationManager
 @inject AuthenticationService AuthenticationService
@@ -208,7 +209,34 @@ else
         {
             await LoadUserRole();
             await LoadProducts();
+            await TryOpenEditFromQueryAsync();
             StateHasChanged();
+        }
+    }
+
+    private async Task TryOpenEditFromQueryAsync()
+    {
+        if (!isAdmin)
+        {
+            return;
+        }
+
+        var uri = NavigationManager.ToAbsoluteUri(NavigationManager.Uri);
+        var qs = QueryHelpers.ParseQuery(uri.Query);
+        if (!qs.TryGetValue("edit", out var editValue) || !int.TryParse(editValue.ToString(), out var productNumber))
+        {
+            return;
+        }
+
+        var product = products.FirstOrDefault(p => p.ProductNumber == productNumber);
+        if (product != null)
+        {
+            await EditProduct(product);
+        }
+        else
+        {
+            message = $"Produkt #{productNumber} hittades inte.";
+            isMessageError = true;
         }
     }
 

@@ -1,0 +1,146 @@
+@using Blazor_Labb2_Webbutveckling.Models
+@using Blazor_Labb2_Webbutveckling.Services
+@inject ProductService ProductService
+@inject NavigationManager NavigationManager
+@implements IDisposable
+
+<div class="product-search-box" @onclick:stopPropagation="true">
+    <label class="form-label small text-light mb-1" for="sidebar-product-search">
+        @(IsAdmin ? "Sök produkt (admin)" : "Sök produkt")
+    </label>
+    <input id="sidebar-product-search"
+           class="form-control form-control-sm"
+           type="search"
+           autocomplete="off"
+           placeholder="@(IsAdmin ? "Namn eller nr – öppnar redigering" : "Namn eller produktnr…")"
+           aria-label="Sök produkt"
+           aria-expanded="@showDropdown"
+           aria-controls="sidebar-product-search-results"
+           value="@query"
+           @oninput="OnInputAsync"
+           @onkeydown="OnKeyDown" />
+
+    @if (showDropdown)
+    {
+        <ul id="sidebar-product-search-results" class="product-search-results list-unstyled mb-0" role="listbox">
+            @if (isSearching)
+            {
+                <li class="product-search-results__item text-muted small px-2 py-2">Söker…</li>
+            }
+            else if (hasSearched && results.Count == 0)
+            {
+                <li class="product-search-results__item text-muted small px-2 py-2" role="status">Ingen träff</li>
+            }
+            else
+            {
+                @foreach (var p in results.Take(8))
+                {
+                    var productNumber = p.ProductNumber;
+                    <li role="option">
+                        <a class="product-search-results__btn"
+                           href="@ProductHref(productNumber)"
+                           @onclick="CloseAfterPick"
+                           @onclick:stopPropagation="true">
+                            <span class="d-block product-search-results__name">@p.Name</span>
+                            <span class="d-block product-search-results__meta">#@productNumber · @p.Price.ToString("N0") kr</span>
+                        </a>
+                    </li>
+                }
+            }
+        </ul>
+    }
+</div>
+
+@code {
+    [Parameter] public bool IsAdmin { get; set; }
+
+    private string query = string.Empty;
+    private List<Product> results = new();
+    private bool isSearching;
+    private bool hasSearched;
+    private bool showDropdown;
+    private CancellationTokenSource? debounceCts;
+
+    private string ProductHref(int productNumber) =>
+        IsAdmin
+            ? $"/products?edit={productNumber}"
+            : $"/product/{productNumber}";
+
+    private async Task OnInputAsync(ChangeEventArgs e)
+    {
+        query = e.Value?.ToString() ?? string.Empty;
+        debounceCts?.Cancel();
+        debounceCts?.Dispose();
+        debounceCts = new CancellationTokenSource();
+        var token = debounceCts.Token;
+
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            showDropdown = false;
+            hasSearched = false;
+            results.Clear();
+            return;
+        }
+
+        showDropdown = true;
+
+        try
+        {
+            await Task.Delay(300, token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        isSearching = true;
+        hasSearched = false;
+        StateHasChanged();
+
+        try
+        {
+            var found = await ProductService.SearchProducts(query.Trim());
+            results = found?.ToList() ?? new List<Product>();
+            hasSearched = true;
+        }
+        catch
+        {
+            results = new List<Product>();
+            hasSearched = true;
+        }
+        finally
+        {
+            isSearching = false;
+            StateHasChanged();
+        }
+    }
+
+    private void OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+        {
+            showDropdown = false;
+            return;
+        }
+
+        if (e.Key == "Enter" && results.Count > 0)
+        {
+            NavigationManager.NavigateTo(ProductHref(results[0].ProductNumber), forceLoad: true);
+            CloseAfterPick();
+        }
+    }
+
+    private void CloseAfterPick()
+    {
+        showDropdown = false;
+        query = string.Empty;
+        results.Clear();
+        hasSearched = false;
+    }
+
+    public void Dispose()
+    {
+        debounceCts?.Cancel();
+        debounceCts?.Dispose();
+    }
+}

@@ -31,15 +31,35 @@ public class ProductRepository : IProductRepository
     {
         if (string.IsNullOrWhiteSpace(query))
         {
-            return await _context.Products
-                .Include(p => p.Images)
-                .ToListAsync();
+            return Enumerable.Empty<Product>();
         }
 
+        var term = query.Trim();
+        var termLower = term.ToLower();
+        var wordPrefix = " " + termLower;
+
+        // Prefix på namn/kategori/produktnr, eller ord i produktnamnet — inte Contains i hela strängen.
         return await _context.Products
             .Include(p => p.Images)
-            .Where(p => p.Name!.Contains(query) || p.ProductNumber.ToString().Contains(query))
-            .ToListAsync() ?? new List<Product>();
+            .Where(p => !p.IsDiscontinued)
+            .Where(p =>
+                (p.Name != null && (
+                    p.Name.ToLower().StartsWith(termLower)
+                    || p.Name.ToLower().Contains(wordPrefix)))
+                || (p.Category != null && p.Category.ToLower().StartsWith(termLower))
+                || p.ProductNumber.ToString().StartsWith(term))
+            .OrderBy(p => p.Name)
+            .ToListAsync();
+    }
+
+    public async Task<IEnumerable<string>> GetDistinctCategoriesAsync()
+    {
+        return await _context.Products
+            .Where(p => p.Category != null && p.Category != string.Empty)
+            .Select(p => p.Category!)
+            .Distinct()
+            .OrderBy(c => c)
+            .ToListAsync();
     }
     public async Task AddProductAsync(Product product)
     {

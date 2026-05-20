@@ -3,6 +3,7 @@
 @using Blazor_Labb2_Webbutveckling.Services
 @inject ProductService ProductService
 @inject NavigationManager NavigationManager
+@inject AuthenticationService AuthenticationService
 @rendermode InteractiveServer
 
 @if (product == null && string.IsNullOrEmpty(message))
@@ -15,7 +16,14 @@ else if (product == null)
 }
 else
 {
-    <a href="/customer-dashboard" class="btn btn-link mb-2">← Tillbaka</a>
+    @if (isCustomer)
+    {
+        <a href="/customer-dashboard" class="btn btn-link mb-2">← Tillbaka</a>
+    }
+    else if (isAdmin)
+    {
+        <a href="/products" class="btn btn-link mb-2">← Till produktlistan</a>
+    }
 
     <div class="row">
         <div class="col-12 col-md-6 text-center">
@@ -53,9 +61,13 @@ else
             {
                 <p class="text-danger">Produkten är utgången.</p>
             }
-            else
+            else if (isCustomer)
             {
                 <a class="btn btn-primary mt-2" href="/createorder">Handla</a>
+            }
+            else if (isAdmin)
+            {
+                <a class="btn btn-primary mt-2" href="/products?edit=@product.ProductNumber">Redigera produkt</a>
             }
 
             <hr />
@@ -72,11 +84,15 @@ else
     private List<ProductImage> images = new();
     private int currentIndex = 0;
     private string message = string.Empty;
+    private bool isAdmin;
+    private bool isCustomer;
 
     private const string ApiBaseUrl = "https://localhost:7018";
 
     protected override async Task OnParametersSetAsync()
     {
+        await LoadRoleAsync();
+
         try
         {
             product = await ProductService.GetProductById(ProductNumber);
@@ -95,6 +111,21 @@ else
             message = ex.Message;
             product = null;
         }
+    }
+
+    private async Task LoadRoleAsync()
+    {
+        var token = await AuthenticationService.GetToken();
+        if (string.IsNullOrEmpty(token))
+        {
+            isAdmin = false;
+            isCustomer = false;
+            return;
+        }
+
+        var role = AuthenticationService.GetRoleFromToken(token);
+        isAdmin = role == "Admin";
+        isCustomer = role == "Customer";
     }
 
     private string ImageSrc(string url) =>

@@ -7,11 +7,13 @@
 
 <h3>Välkommen</h3>
 
-<p>Bläddra bland produkter eller sök i sortimentet.</p>
+<p class="text-muted">Sök produkter i menyn till vänster, eller handla via Create Order.</p>
+
 @if (!string.IsNullOrEmpty(message))
 {
     <p class="alert alert-danger">@message</p>
 }
+
 @if (carouselProducts.Count == 0)
 {
     <p>Inga produkter med bilder att visa.</p>
@@ -22,6 +24,7 @@ else
     var thumb = current.Images?
         .FirstOrDefault(i => i.IsPrimary)
         ?? current.Images?.OrderBy(i => i.SortOrder).FirstOrDefault();
+
     <div class="border rounded p-3 mb-3 text-center">
         @if (thumb != null)
         {
@@ -41,14 +44,14 @@ else
         <a class="btn btn-primary mt-2" href="/product/@current.ProductNumber">Visa produkt</a>
     </div>
 }
+
 <div class="d-flex gap-2">
-    <a class="btn btn-secondary" href="/searchproducts">Sök produkter</a>
     <a class="btn btn-secondary" href="/createorder">Handla</a>
 </div>
 
 @code {
     private List<Product> carouselProducts = new();
-    private int carouselIndex = 0;
+    private int carouselIndex;
     private string message = string.Empty;
 
     private const string ApiBaseUrl = "https://localhost:7018";
