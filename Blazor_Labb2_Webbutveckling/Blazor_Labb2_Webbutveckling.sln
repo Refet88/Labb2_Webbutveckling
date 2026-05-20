@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.13.35825.156
+# Visual Studio Version 18
+VisualStudioVersion = 18.6.11723.189 insiders
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Blazor_Labb2_Webbutveckling", "Blazor_Labb2_Webbutveckling\Blazor_Labb2_Webbutveckling.csproj", "{EDA12088-C38A-40BF-A447-EB7F967FA7DE}"
 EndProject

@@ -1,0 +1,114 @@
+﻿@page "/product/{ProductNumber:int}"
+@using Blazor_Labb2_Webbutveckling.Models
+@using Blazor_Labb2_Webbutveckling.Services
+@inject ProductService ProductService
+@inject NavigationManager NavigationManager
+@rendermode InteractiveServer
+
+@if (product == null && string.IsNullOrEmpty(message))
+{
+    <p><em>Laddar...</em></p>
+}
+else if (product == null)
+{
+    <p class="alert alert-danger">@message</p>
+}
+else
+{
+    <a href="/customer-dashboard" class="btn btn-link mb-2">← Tillbaka</a>
+
+    <div class="row">
+        <div class="col-12 col-md-6 text-center">
+            @if (images.Any())
+            {
+                <img src="@ImageSrc(images[currentIndex].ImageUrl)" alt="@product.Name"
+                     class="img-fluid rounded" style="max-height: 400px; object-fit: contain;" />
+
+                <p class="text-muted mt-2">Bild @(currentIndex + 1) av @images.Count</p>
+
+                <div class="d-flex justify-content-center gap-2">
+                    <button class="btn btn-outline-secondary" @onclick="PreviousImage"
+                            disabled="@(currentIndex == 0)">
+                        Föregående
+                    </button>
+                    <button class="btn btn-outline-secondary" @onclick="NextImage"
+                            disabled="@(currentIndex >= images.Count - 1)">
+                        Nästa
+                    </button>
+                </div>
+            }
+            else
+            {
+                <img src="/images/Noimage.png" alt="Ingen bild" class="img-fluid" style="max-height: 400px;" />
+            }
+        </div>
+
+        <div class="col-12 col-md-6">
+            <h2>@product.Name</h2>
+            <p class="fs-4">@product.Price.ToString("N2") kr</p>
+            <p><strong>Kategori:</strong> @product.Category</p>
+            <p><strong>I lager:</strong> @product.StockQuantity</p>
+
+            @if (product.IsDiscontinued)
+            {
+                <p class="text-danger">Produkten är utgången.</p>
+            }
+            else
+            {
+                <a class="btn btn-primary mt-2" href="/createorder">Handla</a>
+            }
+
+            <hr />
+            <h5>Beskrivning</h5>
+            <p>@(product.Description ?? "Ingen beskrivning.")</p>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int ProductNumber { get; set; }
+
+    private Product? product;
+    private List<ProductImage> images = new();
+    private int currentIndex = 0;
+    private string message = string.Empty;
+
+    private const string ApiBaseUrl = "https://localhost:7018";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        try
+        {
+            product = await ProductService.GetProductById(ProductNumber);
+            if (product == null)
+            {
+                message = "Produkten hittades inte.";
+                return;
+            }
+
+            images = await ProductService.GetProductImagesAsync(ProductNumber);
+            images = images.OrderBy(i => i.SortOrder).ToList();
+            currentIndex = 0;
+        }
+        catch (Exception ex)
+        {
+            message = ex.Message;
+            product = null;
+        }
+    }
+
+    private string ImageSrc(string url) =>
+        url.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+            ? url
+            : ApiBaseUrl + url;
+
+    private void PreviousImage()
+    {
+        if (currentIndex > 0) currentIndex--;
+    }
+
+    private void NextImage()
+    {
+        if (currentIndex < images.Count - 1) currentIndex++;
+    }
+}

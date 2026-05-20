@@ -13,7 +13,12 @@
     <button class="btn btn-success" @onclick="NavigateToCreateProduct">Create New Product</button>
 }
 
-<p>@message</p>
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="alert @(isMessageError ? "alert-danger" : "alert-success") mt-3">
+        @message
+    </div>
+}
 
 @if (isLoading)
 {
@@ -26,27 +31,36 @@ else if (products == null || !products.Any())
 else if (isEditing)
 {
     <EditForm Model="selectedProduct" OnValidSubmit="HandleValidSubmit">
-        <DataAnnotationsValidator />
-        <ValidationSummary />
-        <div>
-            <label>Name:</label>
-            <InputText @bind-Value="selectedProduct!.Name" />
+    <DataAnnotationsValidator />
+    <ValidationSummary class="text-danger mb-3" />
+
+        <div class="form-group mb-3">
+            <label>Name <span class="text-danger">*</span></label>
+            <InputText class="form-control" @bind-Value="selectedProduct!.Name" />
+            <ValidationMessage For="() => selectedProduct!.Name" class="text-danger small" />
         </div>
-        <div>
-            <label>Description:</label>
-            <InputText @bind-Value="selectedProduct.Description" />
+
+        <div class="form-group mb-3">
+            <label>Description</label>
+            <InputText class="form-control" @bind-Value="selectedProduct.Description" />
         </div>
-        <div>
-            <label>Price:</label>
-            <InputNumber @bind-Value="selectedProduct.Price" />
+
+        <div class="form-group mb-3">
+            <label>Price <span class="text-danger">*</span></label>
+            <InputNumber class="form-control" @bind-Value="selectedProduct.Price" />
+            <ValidationMessage For="() => selectedProduct.Price" class="text-danger small" />
         </div>
-        <div>
-            <label>Quantity:</label>
-            <InputNumber @bind-Value="selectedProduct.StockQuantity" />
+
+        <div class="form-group mb-3">
+            <label>Quantity <span class="text-danger">*</span></label>
+            <InputNumber class="form-control" @bind-Value="selectedProduct.StockQuantity" />
+            <ValidationMessage For="() => selectedProduct.StockQuantity" class="text-danger small" />
         </div>
-        <div>
-            <label>Category:</label>
-            <InputText @bind-Value="selectedProduct.Category" />
+
+        <div class="form-group mb-3">
+            <label>Category <span class="text-danger">*</span></label>
+            <InputText class="form-control" @bind-Value="selectedProduct.Category" />
+            <ValidationMessage For="() => selectedProduct.Category" class="text-danger small" />
         </div>
 
         @if (isAdmin)
@@ -99,8 +113,10 @@ else if (isEditing)
             }
         }
 
-        <button type="submit">Save</button>
-        <button type="button" @onclick="CancelEdit">Cancel</button>
+        <div class="d-flex gap-2 mt-3">
+            <button type="submit" class="btn btn-primary">Save</button>
+            <button type="button" class="btn btn-secondary" @onclick="CancelEdit">Cancel</button>
+        </div>
     </EditForm>
 }
 else
@@ -165,6 +181,7 @@ else
 @code {
     private IEnumerable<Product> products = new List<Product>();
     private string message = string.Empty;
+    private bool isMessageError = false;
     private bool isLoading = true;
     private bool isEditing = false;
     private Product? selectedProduct;
@@ -215,6 +232,7 @@ else
         catch
         {
             message = "Failed to load products. Please try again.";
+            isMessageError = true;
         }
     }
 
@@ -232,6 +250,7 @@ else
         productImages = await ProductService.GetProductImagesAsync(product.ProductNumber);
         isEditing = true;
         message = string.Empty;
+        isMessageError = false;
     }
 
     private async Task HandleValidSubmit()
@@ -245,6 +264,7 @@ else
         if (!productChanged && !imagesChanged)
         {
             message = "Nothing to save.";
+            isMessageError = true;
             return;
         }
 
@@ -279,10 +299,14 @@ else
             message = failed == 0
                 ? "Product and images saved."
                 : "Saved, but some image changes failed.";
+            isMessageError = failed != 0;
         }
         catch (Exception ex)
         {
-            message = ex.Message;
+            message = ex is UnauthorizedAccessException
+                ? ex.Message
+                : "Could not save the product. Please try again.";
+            isMessageError = true;
         }
     }
 
@@ -295,6 +319,7 @@ else
         imageIdsToDelete.Clear();
         pendingNewImages.Clear();
         message = string.Empty;
+        isMessageError = false;
     }
 
     private async Task DeleteProduct(int productNumber)
