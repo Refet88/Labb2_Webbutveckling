@@ -1,0 +1,178 @@
+@page "/customer-dashboard"
+@page "/shop"
+@using Blazor_Labb2_Webbutveckling.Models
+@using Blazor_Labb2_Webbutveckling.Services
+@inject ProductService ProductService
+@rendermode InteractiveServer
+
+<h3 class="shop-page__title">Välkommen</h3>
+<p class="text-muted shop-page__lead">Bläddra bland produkterna — klicka på ett kort för att läsa mer och lägga i varukorgen.</p>
+
+@if (isLoading)
+{
+    <p><em>Laddar produkter...</em></p>
+}
+else if (!string.IsNullOrEmpty(message))
+{
+    <p class="alert alert-danger">@message</p>
+}
+else
+{
+    @if (carouselProducts.Count > 0)
+    {
+        var current = carouselProducts[carouselIndex];
+        var carouselThumb = current.Images?
+            .FirstOrDefault(i => i.IsPrimary)
+            ?? current.Images?.OrderBy(i => i.SortOrder).FirstOrDefault();
+
+        <section class="shop-featured card mb-4">
+            <div class="card-body">
+                <p class="text-muted small mb-3 mb-md-2">Utvald produkt</p>
+                <div class="row g-4 align-items-center">
+                    <div class="col-12 col-md-6 text-center">
+                        @if (carouselThumb != null)
+                        {
+                            <a href="/product/@current.ProductNumber" class="shop-featured__image-link">
+                                <img src="@ImageSrc(carouselThumb.ImageUrl)" alt="@current.Name"
+                                     class="img-fluid shop-featured__img" />
+                            </a>
+                        }
+                        else
+                        {
+                            <img src="/images/Noimage.png" alt="Ingen bild" class="img-fluid shop-featured__img" />
+                        }
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <h4 class="shop-featured__name">@current.Name</h4>
+                        @if (!string.IsNullOrWhiteSpace(current.Category))
+                        {
+                            <p class="text-muted mb-2">@current.Category</p>
+                        }
+                        <p class="shop-featured__price mb-3">@current.Price.ToString("N0") kr</p>
+
+                        <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+                            <button type="button" class="btn btn-outline-secondary btn-sm"
+                                    @onclick="PreviousProduct"
+                                    disabled="@(carouselIndex == 0)">
+                                Föregående
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm"
+                                    @onclick="NextProduct"
+                                    disabled="@(carouselIndex >= carouselProducts.Count - 1)">
+                                Nästa
+                            </button>
+                            <span class="text-muted small">
+                                @(carouselIndex + 1) / @carouselProducts.Count
+                            </span>
+                        </div>
+
+                        <a class="btn btn-primary" href="/product/@current.ProductNumber">Visa produkt</a>
+                    </div>
+                </div>
+            </div>
+        </section>
+    }
+
+    <div class="shop-catalog-header d-flex justify-content-between align-items-baseline flex-wrap gap-2 mb-3">
+        <h4 class="mb-0">Alla produkter</h4>
+        <a class="shop-catalog-header__cart-link" href="/cart">Till kundvagn</a>
+    </div>
+
+    @if (products.Count == 0)
+    {
+        <p>Inga produkter att visa.</p>
+    }
+    else
+    {
+        <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-4 g-3">
+            @foreach (var product in products)
+            {
+                var thumb = product.Images?
+                    .FirstOrDefault(i => i.IsPrimary)
+                    ?? product.Images?.OrderBy(i => i.SortOrder).FirstOrDefault();
+
+                <div class="col">
+                    <a href="/product/@product.ProductNumber" class="shop-product-card card h-100 text-decoration-none text-body">
+                        <div class="shop-product-card__img-wrap">
+                            @if (thumb != null)
+                            {
+                                <img src="@ImageSrc(thumb.ImageUrl)" alt="@product.Name"
+                                     class="shop-product-card__img" />
+                            }
+                            else
+                            {
+                                <img src="/images/Noimage.png" alt="Ingen bild"
+                                     class="shop-product-card__img shop-product-card__img--placeholder" />
+                            }
+                        </div>
+                        <div class="card-body pt-2 pb-3">
+                            <h6 class="shop-product-card__title mb-1" title="@product.Name">@product.Name</h6>
+                            @if (!string.IsNullOrWhiteSpace(product.Category))
+                            {
+                                <p class="text-muted small mb-2">@product.Category</p>
+                            }
+                            <p class="shop-product-card__price mb-0">@product.Price.ToString("N0") kr</p>
+                        </div>
+                    </a>
+                </div>
+            }
+        </div>
+    }
+}
+
+@code {
+    private List<Product> products = new();
+    private List<Product> carouselProducts = new();
+    private int carouselIndex;
+    private bool isLoading = true;
+    private string message = string.Empty;
+
+    private const string ApiBaseUrl = "https://localhost:7018";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var all = await ProductService.GetAllProducts();
+            products = all
+                .Where(p => !p.IsDiscontinued)
+                .OrderBy(p => p.Name)
+                .ToList();
+
+            carouselProducts = products
+                .Where(p => p.Images != null && p.Images.Any())
+                .ToList();
+
+            carouselIndex = 0;
+        }
+        catch (Exception ex)
+        {
+            message = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private string ImageSrc(string url) =>
+        url.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+            ? url
+            : ApiBaseUrl + url;
+
+    private void PreviousProduct()
+    {
+        if (carouselIndex > 0)
+        {
+            carouselIndex--;
+        }
+    }
+
+    private void NextProduct()
+    {
+        if (carouselIndex < carouselProducts.Count - 1)
+        {
+            carouselIndex++;
+        }
+    }
+}

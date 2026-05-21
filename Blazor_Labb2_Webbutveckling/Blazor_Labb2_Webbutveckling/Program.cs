@@ -25,6 +25,7 @@ builder.Services.AddAuthorizationCore();
 builder.Services.AddScoped<ProductService>();
 builder.Services.AddScoped<OrderService>();
 builder.Services.AddScoped<CustomerService>();
+builder.Services.AddScoped<CartService>();
 builder.Services.Configure<CircuitOptions>(options => options.DetailedErrors = true);
 builder.Services.AddHttpContextAccessor();
 builder.Logging.AddDebug();

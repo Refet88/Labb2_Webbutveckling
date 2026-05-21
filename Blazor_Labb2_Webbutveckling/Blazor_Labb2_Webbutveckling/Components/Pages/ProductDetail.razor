@@ -63,7 +63,10 @@ else
             }
             else if (isCustomer)
             {
-                <a class="btn btn-primary mt-2" href="/createorder">Handla</a>
+                <div class="mt-2" style="max-width: 240px;">
+                    <CartQuantityControl Product="product" />
+                </div>
+                <a class="btn btn-link btn-sm ps-0 mt-1" href="/cart">Gå till kundvagn</a>
             }
             else if (isAdmin)
             {
@@ -86,7 +89,6 @@ else
     private string message = string.Empty;
     private bool isAdmin;
     private bool isCustomer;
-
     private const string ApiBaseUrl = "https://localhost:7018";
 
     protected override async Task OnParametersSetAsync()
@@ -142,4 +144,5 @@ else
     {
         if (currentIndex < images.Count - 1) currentIndex++;
     }
+
 }

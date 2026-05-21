@@ -1,0 +1,103 @@
+@using Blazor_Labb2_Webbutveckling.Models
+@using Blazor_Labb2_Webbutveckling.Services
+@inject CartService CartService
+@implements IDisposable
+
+@if (Product.StockQuantity < 1)
+{
+    <button type="button" class="btn btn-secondary btn-sm w-100" disabled>Slutsåld</button>
+}
+else if (quantity > 0)
+{
+    <div class="cart-qty-stepper input-group input-group-sm w-100" role="group" aria-label="Antal i varukorg">
+        <button type="button" class="btn btn-outline-secondary"
+                title="Minska antal"
+                @onclick="DecrementAsync"
+                disabled="@isBusy">
+            <i class="bi bi-chevron-down" aria-hidden="true"></i>
+        </button>
+        <span class="form-control text-center cart-qty-stepper__value">@quantity</span>
+        <button type="button" class="btn btn-outline-secondary"
+                title="Öka antal"
+                @onclick="IncrementAsync"
+                disabled="@(isBusy || quantity >= Product.StockQuantity)">
+            <i class="bi bi-chevron-up" aria-hidden="true"></i>
+        </button>
+    </div>
+    <span class="badge text-bg-success cart-qty-stepper__badge w-100 mt-1">I varukorgen</span>
+}
+else
+{
+    <button type="button" class="btn btn-primary btn-sm w-100"
+            @onclick="AddFirstAsync"
+            disabled="@isBusy">
+        <i class="bi bi-cart-plus me-1" aria-hidden="true"></i>
+        @(isBusy ? "Lägger till..." : "Lägg i varukorg")
+    </button>
+}
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <p class="small text-danger mb-0 mt-1">@errorMessage</p>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public Product Product { get; set; } = default!;
+
+    private int quantity;
+    private bool isBusy;
+    private string errorMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        CartService.Changed += OnCartChanged;
+        await RefreshQuantityAsync();
+    }
+
+    private async Task AddFirstAsync()
+    {
+        await RunCartActionAsync(() => CartService.AddAsync(Product, 1));
+    }
+
+    private async Task IncrementAsync()
+    {
+        await RunCartActionAsync(() => CartService.IncrementAsync(Product));
+    }
+
+    private async Task DecrementAsync()
+    {
+        await RunCartActionAsync(() => CartService.DecrementAsync(Product));
+    }
+
+    private async Task RunCartActionAsync(Func<Task<(bool Success, string? Error)>> action)
+    {
+        errorMessage = string.Empty;
+        isBusy = true;
+
+        try
+        {
+            var (success, error) = await action();
+            if (!success)
+            {
+                errorMessage = error ?? "Kunde inte uppdatera varukorgen.";
+            }
+        }
+        finally
+        {
+            isBusy = false;
+            await RefreshQuantityAsync();
+        }
+    }
+
+    private void OnCartChanged() => _ = RefreshQuantityAsync();
+
+    private async Task RefreshQuantityAsync()
+    {
+        await CartService.EnsureLoadedAsync();
+        quantity = CartService.GetQuantity(Product.ProductNumber);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose() => CartService.Changed -= OnCartChanged;
+}

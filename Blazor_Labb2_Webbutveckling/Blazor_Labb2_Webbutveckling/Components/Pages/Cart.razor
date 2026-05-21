@@ -1,0 +1,218 @@
+@page "/cart"
+@using Blazor_Labb2_Webbutveckling.Models
+@using Blazor_Labb2_Webbutveckling.Models.Blazor_Labb2_Webbutveckling.Models
+@using Blazor_Labb2_Webbutveckling.Services
+@inject CartService CartService
+@inject OrderService OrderService
+@inject AuthenticationService AuthenticationService
+@inject NavigationManager NavigationManager
+@implements IDisposable
+@rendermode InteractiveServer
+
+<h3>Kundvagn</h3>
+
+@if (!isReady)
+{
+    <p><em>Laddar...</em></p>
+}
+else if (CartService.IsEmpty)
+{
+    <p class="text-muted">Kundvagnen är tom.</p>
+    <a class="btn btn-primary" href="/customer-dashboard">Fortsätt handla</a>
+}
+else
+{
+    <table class="table align-middle">
+        <thead>
+            <tr>
+                <th>Produkt</th>
+                <th>Pris/st</th>
+                <th>Antal</th>
+                <th>Summa</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in CartService.Items)
+            {
+                <tr>
+                    <td>
+                        <a href="/product/@item.ProductNumber">@item.Name</a>
+                        <div class="small text-muted">#@item.ProductNumber</div>
+                        @if (item.IsDiscontinued)
+                        {
+                            <span class="badge text-bg-danger">Utgången</span>
+                        }
+                    </td>
+                    <td>@item.Price.ToString("N2") kr</td>
+                    <td style="max-width: 120px;">
+                        <input type="number" class="form-control form-control-sm" min="1" max="@item.StockQuantity"
+                               value="@item.Quantity"
+                               disabled="@item.IsDiscontinued"
+                               @onchange="e => OnQuantityChanged(item.ProductNumber, e.Value)" />
+                        <div class="small text-muted">Max @item.StockQuantity</div>
+                    </td>
+                    <td>@item.LineTotal.ToString("N2") kr</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveItem(item.ProductNumber)">
+                            Ta bort
+                        </button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <div class="d-flex justify-content-between align-items-center border-top pt-3">
+        <strong class="fs-5">Totalt: @CartService.TotalPrice.ToString("N2") kr</strong>
+        <span class="text-muted">@CartService.TotalItemCount st</span>
+    </div>
+
+    <div class="d-flex gap-2 mt-3">
+        <button class="btn btn-success" @onclick="SubmitOrderAsync" disabled="@isSubmitting">
+            @(isSubmitting ? "Skickar..." : "Lägg beställning")
+        </button>
+        <button class="btn btn-outline-secondary" @onclick="ClearCartAsync">Töm kundvagn</button>
+        <a class="btn btn-link" href="/customer-dashboard">Fortsätt handla</a>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="alert @alertClass mt-3">@message</div>
+}
+
+@code {
+    private bool isReady;
+    private bool isSubmitting;
+    private string message = string.Empty;
+    private string alertClass = "alert-primary";
+
+    protected override async Task OnInitializedAsync()
+    {
+        CartService.Changed += OnCartChanged;
+        await CartService.EnsureLoadedAsync();
+        isReady = true;
+    }
+
+    private async Task OnQuantityChanged(int productNumber, object? value)
+    {
+        if (value == null || !int.TryParse(value.ToString(), out var qty))
+        {
+            return;
+        }
+
+        var (success, error) = await CartService.SetQuantityAsync(productNumber, qty);
+        if (!success)
+        {
+            message = error ?? "Kunde inte uppdatera antal.";
+            alertClass = "alert-warning";
+        }
+        else
+        {
+            message = string.Empty;
+        }
+    }
+
+    private async Task RemoveItem(int productNumber)
+    {
+        await CartService.RemoveAsync(productNumber);
+        message = string.Empty;
+    }
+
+    private async Task ClearCartAsync()
+    {
+        await CartService.ClearAsync();
+        message = string.Empty;
+    }
+
+    private async Task SubmitOrderAsync()
+    {
+        if (CartService.IsEmpty)
+        {
+            message = "Kundvagnen är tom.";
+            alertClass = "alert-warning";
+            return;
+        }
+
+        isSubmitting = true;
+        message = string.Empty;
+
+        try
+        {
+            var token = await AuthenticationService.GetToken();
+            if (string.IsNullOrEmpty(token))
+            {
+                message = "Du måste vara inloggad.";
+                alertClass = "alert-danger";
+                return;
+            }
+
+            var role = AuthenticationService.GetRoleFromToken(token);
+            if (role != "Customer")
+            {
+                message = "Endast kunder kan lägga beställning.";
+                alertClass = "alert-danger";
+                return;
+            }
+
+            var customerId = AuthenticationService.GetCustomerIdFromToken(token);
+            if (customerId == null || customerId <= 0)
+            {
+                message = "Kunde inte hämta kund-id.";
+                alertClass = "alert-danger";
+                return;
+            }
+
+            var orderRequest = new OrderRequest
+            {
+                CustomerId = customerId.Value,
+                OrderItems = CartService.Items
+                    .Where(i => !i.IsDiscontinued && i.Quantity > 0)
+                    .Select(i => new OrderItemRequest
+                    {
+                        ProductNumber = i.ProductNumber,
+                        Quantity = i.Quantity
+                    })
+                    .ToList()
+            };
+
+            if (orderRequest.OrderItems.Count == 0)
+            {
+                message = "Inga giltiga produkter att beställa.";
+                alertClass = "alert-warning";
+                return;
+            }
+
+            var response = await OrderService.AddOrder(orderRequest);
+            if (response.IsSuccessStatusCode)
+            {
+                var order = await response.Content.ReadFromJsonAsync<Order>();
+                await CartService.ClearAsync();
+                message = order != null
+                    ? $"Beställning #{order.OrderId} är mottagen. Bekräftelse skickas till din e-post."
+                    : "Beställningen är mottagen. Bekräftelse skickas till din e-post.";
+                alertClass = "alert-success";
+            }
+            else
+            {
+                var errorDetails = await response.Content.ReadAsStringAsync();
+                message = $"Beställningen misslyckades. {errorDetails}";
+                alertClass = "alert-danger";
+            }
+        }
+        catch (Exception ex)
+        {
+            message = $"Fel: {ex.Message}";
+            alertClass = "alert-danger";
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private void OnCartChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => CartService.Changed -= OnCartChanged;
+}

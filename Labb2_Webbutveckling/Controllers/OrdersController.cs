@@ -1,6 +1,7 @@
 ﻿using Blazor_Labb2_Webbutveckling.Models;
 using Labb2_Webbutveckling.Data;
 using Labb2_Webbutveckling.Models;
+using Labb2_Webbutveckling.Service_Backend;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -14,10 +15,17 @@ namespace Labb2_Webbutveckling.Controllers
     public class OrdersController : ControllerBase
     {
         private readonly IUnitOfWork _unitOfWork;
+        private readonly IOrderConfirmationEmailService _emailService;
+        private readonly ILogger<OrdersController> _logger;
 
-        public OrdersController(IUnitOfWork unitOfWork)
+        public OrdersController(
+            IUnitOfWork unitOfWork,
+            IOrderConfirmationEmailService emailService,
+            ILogger<OrdersController> logger)
         {
             _unitOfWork = unitOfWork;
+            _emailService = emailService;
+            _logger = logger;
         }
 
         /// <summary>
@@ -188,7 +196,32 @@ namespace Labb2_Webbutveckling.Controllers
             try
             {
                 await _unitOfWork.OrderRepository.AddOrderAsync(order);
-                return CreatedAtAction(nameof(GetOrderById), new { id = order.OrderId }, order);
+
+                var savedOrder = await _unitOfWork.OrderRepository.GetOrderByIdAsync(order.OrderId);
+                if (savedOrder != null)
+                {
+                    try
+                    {
+                        await _emailService.SendOrderConfirmationAsync(savedOrder, existingCustomer);
+                    }
+                    catch (Exception emailEx)
+                    {
+                        _logger.LogWarning(
+                            emailEx,
+                            "Order {OrderId} created but confirmation email failed.",
+                            order.OrderId);
+                    }
+                }
+
+                return CreatedAtAction(nameof(GetOrderById), new { id = order.OrderId }, savedOrder ?? order);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
             }
             catch (Exception ex)
             {

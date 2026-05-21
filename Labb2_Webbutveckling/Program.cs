@@ -1,4 +1,6 @@
+using Labb2_Webbutveckling.Configuration;
 using Labb2_Webbutveckling.Data;
+using Labb2_Webbutveckling.Service_Backend;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -9,9 +11,6 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Configuration
-    .SetBasePath(Directory.GetCurrentDirectory())
-    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
 
 builder.Services.AddCors(options =>
 {
@@ -111,6 +110,8 @@ builder.Services.AddScoped<ICustomerRepository, CustomerRepository>();
 builder.Services.AddScoped<IProductRepository, ProductRepository>();
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("Email"));
+builder.Services.AddScoped<IOrderConfirmationEmailService, OrderConfirmationEmailService>();
 builder.Services.AddScoped<IImageRepository, ImageRepository>();
 builder.Logging.AddConsole();
 builder.Logging.AddDebug();

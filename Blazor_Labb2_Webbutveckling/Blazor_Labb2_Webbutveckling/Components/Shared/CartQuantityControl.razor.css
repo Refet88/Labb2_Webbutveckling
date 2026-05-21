@@ -1,0 +1,11 @@
+.cart-qty-stepper__value {
+    font-weight: 600;
+    padding-top: 0.2rem;
+    padding-bottom: 0.2rem;
+    background-color: var(--bs-body-bg);
+}
+
+.cart-qty-stepper__badge {
+    font-size: 0.65rem;
+    font-weight: 500;
+}
